@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "//_comment": [
+    "Reference copy of the 'secure' permission profile that setup-opencode.sh",
+    "merges into your project's opencode.json. The script keeps this profile in",
+    "sync itself — edit opencode.json (or re-run with SECURITY_PROFILE / UNLOCK)",
+    "rather than editing this file. Shown here so you can audit exactly what you",
+    "are allowing.",
+    "",
+    "Rules are glob patterns matched against parsed tool input, evaluated",
+    "last-match-wins. The proot-distro container is the hard boundary; this",
+    "file is the seatbelt in front of it."
+  ],
+  "share": "disabled",
+  "autoupdate": false,
+  "server": {
+    "mdns": false
+  },
+  "permission": {
+    "*": "allow",
+    "bash": {
+      "*": "allow",
+      "rm -rf /*": "deny",
+      "rm -rf ~*": "deny",
+      "rm -rf $HOME*": "deny",
+      "rm -fr /*": "deny",
+      "chmod -R 777 *": "deny",
+      "dd *": "deny",
+      "mkfs*": "deny",
+      "shutdown*": "deny",
+      "reboot*": "deny"
+    },
+    "external_directory": {
+      "*": "ask",
+      "/tmp/*": "allow",
+      "/var/tmp/*": "allow"
+    }
+  }
+}
