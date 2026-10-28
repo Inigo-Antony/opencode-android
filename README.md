@@ -1,7 +1,21 @@
-# opencode-android
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="opencode-android — run OpenCode on your Android phone" width="800">
+</p>
 
-Run OpenCode (terminal AI coding agent) on your Android phone in one command —
-Termux + proot-distro Ubuntu, with your main files locked away in a sandbox.
+<p align="center">
+  Run <b>OpenCode</b> (terminal AI coding agent) on your Android phone in one command —<br>
+  Termux + proot-distro Ubuntu, with your main files locked away in a sandbox.
+</p>
+
+<p align="center">
+  <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
+  <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
+  <img alt="Tests: 29 checks" src="https://img.shields.io/badge/tests-29%20checks-brightgreen">
+  <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
+</p>
+
+---
+
 Works with an OpenCode Go subscription (auto-detected) or free Big Pickle, no
 key needed. Ships: opencode, GSD, graphify, ECC, MCPs (context7, parallel,
 tavily, exa), dcp context pruning, anti-hang shell rules, secure-by-default
