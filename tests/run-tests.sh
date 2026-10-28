@@ -202,6 +202,21 @@ chk "gitignore/planning-graphs" "1" "$(grep -cxF '.planning/graphs/' "$WORK/gi/.
 chk "mcp-rm/prototype-noop" "" "$(cfg mcp-rm constructor 2>/dev/null)"
 chk "mcp-rm/prototype-untouched" "true" "$(node -pe 'const c=JSON.parse(require("fs").readFileSync("opencode.json","utf8"));String(!c.mcp||!Object.hasOwn(c.mcp,"constructor"))')"
 
+# 22. default models: Go auth -> opencode-go/glm-5.3-flash for main and small,
+# still overridable via GO_MODEL / GO_SMALL_MODEL.
+awk '/^detect_go_auth\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" > "$WORK/models.sh"
+awk '/^write_base_config\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" >> "$WORK/models.sh"
+mkdir -p "$WORK/mhome/.local/share/opencode"
+printf '{"opencode-go":{"type":"api","key":"dummy"}}' > "$WORK/mhome/.local/share/opencode/auth.json"
+model_out() {
+  HOME="$WORK/mhome" "$@" bash -c '. "$1"; cfg(){ printf "%s\n" "$@"; }; log(){ :; }; need(){ return 1; }; write_base_config' _ "$WORK/models.sh"
+}
+DEFAULT_OUT=$(model_out)
+chk "model/go-default" "2" "$(printf '%s\n' "$DEFAULT_OUT" | grep -cxF 'opencode-go/glm-5.3-flash')"
+OVERRIDE_OUT=$(model_out env GO_MODEL=grok-4.7 GO_SMALL_MODEL=mini)
+chk "model/go-override-main" "opencode-go/grok-4.7" "$(printf '%s\n' "$OVERRIDE_OUT" | sed -n '2p')"
+chk "model/go-override-small" "opencode-go/mini" "$(printf '%s\n' "$OVERRIDE_OUT" | sed -n '3p')"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 52 checks" src="https://img.shields.io/badge/tests-52%20checks-brightgreen">
+  <img alt="Tests: 55 checks" src="https://img.shields.io/badge/tests-55%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -89,7 +89,7 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
 | `UNLOCK=1` | Allow-everything profile, no approval prompts |
 | `SECURITY_PROFILE=secure\|keep` | `keep` leaves your permission settings untouched |
 | `OPENCODE_MODEL` / `OPENCODE_SMALL_MODEL` | Force models, e.g. `opencode-go/grok-4.7` |
-| `GO_MODEL` / `GO_SMALL_MODEL` | Models when a Go subscription is detected (default `kimi-k3` / `glm-5.3-flash`) |
+| `GO_MODEL` / `GO_SMALL_MODEL` | Main/small models when a Go subscription is detected (both default to `glm-5.3-flash`) |
 | `ECC_SKILLS=all\|none` | ECC skills: all 300+, or none (default: 11 core) |
 | `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / dcp / shell-strategy |
 | `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1` | Skip a component |
@@ -120,7 +120,7 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (52 checks)
+tests/run-tests.sh           Automated test battery (55 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits

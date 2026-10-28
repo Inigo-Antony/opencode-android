@@ -6,9 +6,9 @@
 #
 # Options (env vars):
 #   SKIP_OPENCODE=1 SKIP_GSD=1 SKIP_GRAPHIFY=1 SKIP_ECC=1 SKIP_MCP=1 SKIP_EXTRAS=1
-#   OPENCODE_MODEL=...            force main model (e.g. opencode-go/kimi-k3)
+#   OPENCODE_MODEL=...            force main model (e.g. opencode-go/glm-5.3-flash)
 #   OPENCODE_SMALL_MODEL=...      force small model
-#   GO_MODEL=kimi-k3              main model used when OpenCode Go auth is detected
+#   GO_MODEL=glm-5.3-flash        main model used when OpenCode Go auth is detected
 #   GO_SMALL_MODEL=glm-5.3-flash  small model used when OpenCode Go auth is detected
 #   SECURITY_PROFILE=secure|keep  secure (default) locks destructive bash + outside
 #                                 reads; keep leaves your permission settings alone
@@ -29,7 +29,8 @@
 #
 # Model policy (Go-first, no hardcoded keys):
 #   - If OpenCode Go auth is found (open opencode and run: /connect), the default
-#     model becomes opencode-go/$GO_MODEL and small_model opencode-go/$GO_SMALL_MODEL.
+#     model becomes opencode-go/$GO_MODEL and small_model opencode-go/$GO_SMALL_MODEL
+#     (both default to glm-5.3-flash).
 #   - Otherwise falls back to opencode/big-pickle (free, no key).
 #   - OPENCODE_MODEL always wins.
 
@@ -376,7 +377,7 @@ write_base_config() {
     model="$OPENCODE_MODEL" small_model="${OPENCODE_SMALL_MODEL:-$OPENCODE_MODEL}"
     log "Writing base config (forced model: $model)"
   elif detect_go_auth; then
-    model="opencode-go/${GO_MODEL:-kimi-k3}"
+    model="opencode-go/${GO_MODEL:-glm-5.3-flash}"
     small_model="opencode-go/${GO_SMALL_MODEL:-glm-5.3-flash}"
     log "Writing base config (OpenCode Go detected: $model)"
   else
@@ -681,8 +682,8 @@ Ready. Next:
   5. /plan <task>  or  /tdd   # ECC commands; Tab switches primary agents, @planner calls a subagent
 
 Tips:
-  - Go models use the form opencode-go/<model> (e.g. opencode-go/kimi-k3).
-    Override anytime:  OPENCODE_MODEL=opencode-go/glm-5.3-flash bash setup-opencode.sh
+  - Go models use the form opencode-go/<model> (e.g. opencode-go/glm-5.3-flash).
+    Override anytime:  OPENCODE_MODEL=opencode-go/grok-4.7 bash setup-opencode.sh
   - MCPs: context7 (library docs) + parallel-search (web). Both keyless.
   - Session without approval prompts:  UNLOCK=1 bash setup-opencode.sh   (re-run doctor after: DOCTOR_ONLY=1 bash setup-opencode.sh)
   - Something broke later?  DOCTOR_ONLY=1 bash setup-opencode.sh

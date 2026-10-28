@@ -10,7 +10,7 @@ Installs and configures OpenCode on Android (Termux + proot-distro Ubuntu). **Sc
 ## Verification
 
 ```bash
-bash tests/run-tests.sh     # the only automated test; exit 0 = pass (52 checks)
+bash tests/run-tests.sh     # the only automated test; exit 0 = pass (55 checks)
 bash -n <script>.sh         # syntax check for any Bash edit
 ```
 
