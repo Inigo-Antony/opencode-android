@@ -1,0 +1,35 @@
+# AGENTS.md — opencode-android
+
+Installs and configures OpenCode on Android (Termux + proot-distro Ubuntu). **Scripts-only repo: Bash + one Node script embedded in a Bash heredoc.** No package manifests, no linters, no CI.
+
+## The two entrypoints
+
+- `bootstrap.sh` — Termux side. Hard-refuses to run anywhere except Termux (checks `TERMUX_VERSION` / `/data/data/com.termux`). Copies repo files into the container at `/root/opencode-android` and runs `setup-opencode.sh` there.
+- `setup-opencode.sh` — container side. **Must run inside a git repo** (`git rev-parse --show-toplevel` or it exits), and refuses Node reporting `platform=android` (Termux Node; `bootstrap.sh` installs Node 20 from NodeSource). Installs opencode, GSD, graphify, ECC, MCP servers, then validates config.
+
+## Verification
+
+```bash
+bash tests/run-tests.sh     # the only automated test; exit 0 = pass (29 checks)
+bash -n <script>.sh         # syntax check for any Bash edit
+```
+
+- `tests/run-tests.sh` **extracts the embedded `cfg.cjs` from `setup-opencode.sh` via awk** (heredoc between `cat > "$CFG" <<'JS'` and the line `JS`) and asserts against a temp `opencode.json`. Any edit to the embedded JS must stay inside those exact markers or the test silently tests stale code.
+- `tests/verify-sandbox.sh` has 4 modes: `termux` (canary leak checks; run **only in Termux**), `inside`, `project` (config hygiene: secrets, `share`, pinned plugins, `{file:}` refs), `bench` (time/memory). Full behavioral tests live in `tests/MANUAL-TESTS.md`.
+
+## cfg.cjs / opencode.json invariants (tested — don't break)
+
+- `opencode.json` is parsed **tolerantly**: JSONC comments, trailing commas, and **multiple concatenated `{...}` root objects are merged**. Never assume strict-JSON semantics when reading or writing it.
+- **`plugin` and `plugins` keys must always be kept identical** in the generated config (`syncPlugins()`); OpenCode 1 reads `plugin`, OpenCode 2 reads `plugins`.
+- `setup-opencode.sh` must stay **idempotent**: re-running repairs `opencode.json` every time. `cfg base` uses `??=` so an existing `model` is never clobbered (except `--replace-default` swaps the `opencode/big-pickle` fallback); `cfg security secure` uses `??=` so user permission rules win; `cfg security unlock` overwrites.
+- **API keys must never appear literally in `opencode.json`** — MCP headers use `{env:VAR}`/`--bearer-env`/`--header` so the value lands at runtime, not in a committable file. `project` mode greps for leaks and tests assert this.
+- The doctor (`DOCTOR_ONLY=1 bash setup-opencode.sh`) strips `SKILL.md` entries from `instructions` (token bloat), keeps `https://` entries, rewrites `{file:}` refs to an existing path, and **exits 3 on unresolved refs**.
+- `templates/security-profile.json` is an auditable mirror of `SECURE_PERMISSION` in `setup-opencode.sh` — keep the two in sync when changing permission rules.
+
+## Conventions that differ from defaults
+
+- `graphify install` **must never be run bare** (it targets Claude); always `graphify install --platform opencode`, then `graphify opencode install`.
+- Model IDs use the `opencode-go/<model>` form; without Go auth the fallback is `opencode/big-pickle`. `OPENCODE_MODEL` always overrides detection; `GO_MODEL`/`GO_SMALL_MODEL` only apply when Go auth is detected.
+- Secure posture is deliberate: `share: disabled`, `autoupdate: false`, `server.mdns: false`, deny list for destructive bash. Don't relax it in defaults; `UNLOCK=1` is the opt-in.
+- In this setup, GitButler is **not available** (Android target); plain `git` (+ optional `gh`) covers VCS needs.
+- The proot container is the real security boundary; deny rules are a seatbelt. Never add `--termux-home` binds to logins.

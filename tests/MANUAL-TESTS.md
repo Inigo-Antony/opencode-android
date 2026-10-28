@@ -1,6 +1,6 @@
 # Manual tests for opencode-android
 
-Run these after `verify-sandbox.sh` passes. They cover what a script cannot:
+Run these after `tests/verify-sandbox.sh` passes. They cover what a script cannot:
 what the agent actually does when it is asked to misbehave, and what the setup
 costs on your device. Do all of them inside the container, in a throwaway
 project, using `proot-distro login --isolated ubuntu`.
@@ -13,7 +13,7 @@ worth more than any security claim.
 ### A1. Canary round trip (automated)
 In Termux:
 
-    bash verify-sandbox.sh termux
+    bash tests/verify-sandbox.sh termux
 
 Expected: `--isolated login: no leak found`. The `default login` line is
 allowed to show a leak. It documents what happens if you forget the flag.
@@ -97,7 +97,7 @@ must exist in the shell that launches opencode, so use a launcher that loads
 
 ### D1. Startup and memory
 
-    bash verify-sandbox.sh bench
+    bash tests/verify-sandbox.sh bench
 
 Record wall time and peak memory on the full install and on the minimal one.
 

@@ -1,145 +1,104 @@
 # opencode-android
 
-Run **OpenCode** (the open-source terminal AI coding agent) as a full power-user
-station on your Android phone — **Termux + proot-distro** — with one command, and
-with your main files locked away in a separate sandbox.
+Run OpenCode (terminal AI coding agent) on your Android phone in one command —
+Termux + proot-distro Ubuntu, with your main files locked away in a sandbox.
+Works with an OpenCode Go subscription (auto-detected) or free Big Pickle, no
+key needed. Ships: opencode, GSD, graphify, ECC, MCPs (context7, parallel,
+tavily, exa), dcp context pruning, anti-hang shell rules, secure-by-default
+config.
 
-Designed for: OpenCode **Go** subscribers (auto-detected, model set for you) and
-anyone else (falls back to the free Big Pickle model, no API key needed).
-
-## What you get
-
-| Component | What it does |
-| --- | --- |
-| **proot-distro Ubuntu** | A real Linux userland on your phone — the hard security boundary |
-| **opencode** | The agent itself (linux-arm64 binary) |
-| **Everything-Claude-Code (ECC)** | `ecc-universal` plugin + 25 review/build subagents + ~20 workflow commands; 11 core skills by default (`ECC_SKILLS=all` for all 300+) |
-| **GSD (get-shit-done)** | Spec → plan → implement project workflow library |
-| **graphify** | Local knowledge-graph of your codebase (`/graphify .`), queried before grepping — big token saver |
-| **MCP: Context7** | Up-to-date library/API docs (no key) |
-| **MCP: Parallel** | Deep web search / research (no key) |
-| **MCP: Tavily** | Web search + extraction (keyless Search/Extract; add `TAVILY_API_KEY` in `.env` for more) |
-| **MCP: Exa** | Web search (keyless; add `EXA_API_KEY` in `.env` for more) |
-| **dcp** | Dynamic context pruning — prunes stale tool output (matters a lot on phones) |
-| **shell-strategy** | Non-interactive shell rules — stops agents hanging on TTY prompts (common in proot) |
-| **Secure-by-default config** | `share: disabled`, no auto-update, destructive bash denied, prompts before touching files outside the project |
-
-Re-running the script is always safe and idempotent; it repairs a broken
-`opencode.json` every time.
-
-## Quickstart (one command)
+## Install
 
 1. Install [Termux from F-Droid](https://f-droid.org/en/packages/com.termux/)
-   (**not** Play Store — it is outdated/unmaintained).
-
-2. In Termux, run (replace `YOUR-USER` with this repo's owner):
+   (not Play Store).
+2. In Termux:
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/main/bootstrap.sh | bash
    ```
 
-   That installs proot-distro + Ubuntu, disables your Termux home from the
-   container (that is your sandbox), installs Node + opencode + everything above,
-   and prints next steps. ~1–2 GB storage / ~15 minutes on Wi-Fi.
+   ~1–2 GB storage, ~15 min on Wi-Fi. Installs proot-distro + Ubuntu, the
+   sandbox (no Termux-home access), Node 20, opencode and the full stack.
 
-3. Use it:
+3. Use it (per project):
 
    ```bash
-   proot-distro login ubuntu   # enter the sandbox
+   proot-distro login ubuntu                      # enter the sandbox
    mkdir -p ~/my-project && cd ~/my-project
-   git init                    # setup must run inside a git repo
-   bash /root/opencode-android/setup-opencode.sh   # per-project setup
-   opencode                    # start the agent
+   git init                                       # setup must run in a git repo
+   bash /root/opencode-android/setup-opencode.sh
+   opencode
    ```
 
-4. One-time model setup inside opencode:
-   - **OpenCode Go subscribers:** type `/connect`, pick **OpenCode Go**, paste
-     your key from [opencode.ai/console](https://opencode.ai/console). Then
-     re-run the setup script once inside this project — it detects your Go
-     subscription and sets `model: opencode-go/kimi-k3` with a fast/cheap
-     `small_model` (`opencode-go/glm-5.3-flash`). Change with:
-     `GO_MODEL=kimi-k3.1-pro bash setup-opencode.sh`
-   - **No subscription:** Big Pickle is already configured, free, no key.
+4. Model (one-time inside opencode):
+   - OpenCode Go: `/connect` → OpenCode Go → paste key from
+     [opencode.ai/console](https://opencode.ai/console), then re-run the setup
+     script once to pick up `opencode-go/kimi-k3` (+ fast `small_model`).
+   - No subscription: Big Pickle is already set, free, no key.
 
-## Manual install path (if the one-liner fails)
+Manual fallback if the one-liner fails:
 
 ```bash
-# Termux side
+# Termux
 pkg update -y && pkg install proot-distro
-proot-distro install ubuntu
-proot-distro login ubuntu
-
-# inside Ubuntu
+proot-distro install ubuntu && proot-distro login ubuntu
+# Ubuntu (inside)
 apt update && apt install -y curl git python3-pip pipx
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs
 git clone https://github.com/YOUR-USER/opencode-android /root/opencode-android
-
-cd /path/to/your/git/project
-bash /root/opencode-android/setup-opencode.sh
+bash /root/opencode-android/setup-opencode.sh   # from your project dir
 ```
 
-## Tuning (environment variables)
+## Verify
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `UNLOCK=1` | off | Allow-everything profile (no approval prompts) — power-user flow |
-| `SECURITY_PROFILE=secure\|keep` | `secure` | `keep` leaves your permission settings untouched |
-| `OPENCODE_MODEL` / `OPENCODE_SMALL_MODEL` | auto | Force models (e.g. `opencode-go/grok-4.7`) |
-| `GO_MODEL` / `GO_SMALL_MODEL` | `kimi-k3` / `glm-5.3-flash` | Models used when a Go subscription is detected |
-| `ECC_SKILLS` | `core` | `all` = every ECC skill, `none` = no skills |
-| `ENABLE_CONTEXT7=0` etc. | on | Disable any of context7 / parallel / tavily / exa / dcp / shell-strategy |
-| `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1` | off | Skip a component |
-| `DOCTOR_ONLY=1` | off | Only repair + validate `opencode.json` |
-| `TAVILY_API_KEY`, `EXA_API_KEY` | unset | Put in a git-ignored `.env` next to opencode.json; wired as MCP headers, never inlined into JSON |
+After `opencode` launches: `/models` (Go or big-pickle), `/gsd-help`,
+`/graphify .`, MCP servers listed at startup (context7, parallel-search,
+tavily, exa), `@code-reviewer` for ECC subagents.
 
-## Verify your setup
-
-After `opencode` launches:
-
-- `/models` — model shows `opencode-go/…` (Go) or `opencode/big-pickle`
-- `/gsd-help` — GSD answering
-- `/graphify .` — builds `graphify-out/`, ask structural questions via `graphify query`
-- `@code-reviewer` — ECC subagents available
-- startup panel lists MCP servers **context7, parallel-search, tavily, exa**
-
-## First-session checklist for a "power user"
-
-- Tab — switch `build`/`plan` primary agents; `@planner` etc for subagents
-- `/plan <feature>` → `/tdd` → `/code-review` → `/security` — ECC review flow
-- `/gsd:plan <goal>` → GSD GSD wraps features with spec/plan/implement steps
-- `/new` — fresh session; `/share` is disabled by design (privacy)
-
-## Troubleshooting
-
-| Symptom | Fix |
+| Test | What it does |
 | --- | --- |
-| Clones/installs silently fail | DNS inside proot: `echo 'nameserver 8.8.8.8' > /etc/resolv.conf` |
-| `Node reports platform=android` | You are on the Termux Node; run everything inside the proot distro (script refuses by design) |
-| Session killed with `signal 9` when you leave the app | Android 12+ phantom process killer: `termux-wake-lock`, keep Termux in foreground, use `tmux`? optional inside proot |
-| `epoll`/`futex` failures under load | RAM limit: check `free -m`; avoid browser-heavy MCP/tooling (no Playwright E2E on small phones) |
-| Config broke after manual edits | `DOCTOR_ONLY=1 bash setup-opencode.sh` (backups kept as `opencode.json.bak.*`) |
-| GSD reports missing gsd-sdk | `npm install -g get-shit-done-cc@latest` |
-| graphify installs into `~/.claude/` | You ran bare `graphify install`; fix: `graphify claude uninstall && graphify install --platform opencode` |
+| `bash tests/run-tests.sh` | Functional battery for the embedded config editor (exit 0 = pass) |
+| `bash tests/verify-sandbox.sh termux` | In **Termux only**: plants canaries, checks the container can't reach Termux home / `/sdcard` |
+| `bash tests/verify-sandbox.sh project` | In the container, project dir: config hygiene, secrets, plugin pinning |
+| `bash tests/verify-sandbox.sh bench` | Wall time + peak memory of one opencode run |
+| `tests/MANUAL-TESTS.md` | Behavioral tests the scripts can't cover (agent prompt-injection, canary, permission prompts) |
 
-## Security in one paragraph
+Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
+`DOCTOR_ONLY=1 bash setup-opencode.sh` only repairs/validates (backups go to
+`opencode.json.bak.*`). Config broke after manual edits? Run the doctor.
 
-The **proot container is the real boundary**: opencode, the model's tool calls,
-plugins and every subprocess run inside a Linux userland that cannot reach your
-Android/Termux files (no root, no bind mounts of your home), and Termux/Android
-files cannot reach into it either. On top of that the config denies
-world-breaking commands (`rm -rf /`, `dd`, `mkfs…`) and asks before touching
-paths outside the project directory, plus `share: disabled` (no prompt
-sharing/upload), `autoupdate: false` (no surprise binaries) and API keys stay
-in `.env` / opencode's own auth store — never in JSON you might commit.
-Full threat model + honest limits: [docs/SECURITY.md](docs/SECURITY.md).
+## Tuning
 
-## Extras (optional, inside the container)
+| Variable | Meaning |
+| --- | --- |
+| `UNLOCK=1` | Allow-everything profile, no approval prompts |
+| `SECURITY_PROFILE=secure\|keep` | `keep` leaves your permission settings untouched |
+| `OPENCODE_MODEL` / `OPENCODE_SMALL_MODEL` | Force models, e.g. `opencode-go/grok-4.7` |
+| `GO_MODEL` / `GO_SMALL_MODEL` | Models when a Go subscription is detected (default `kimi-k3` / `glm-5.3-flash`) |
+| `ECC_SKILLS=all\|none` | ECC skills: all 300+, or none (default: 11 core) |
+| `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / tavily / exa / dcp / shell-strategy |
+| `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1` | Skip a component |
+| `TAVILY_API_KEY`, `EXA_API_KEY` | Put in git-ignored `.env`; wired as MCP headers, never inlined into JSON |
 
-- **GitHub CLI** (`gh`): `apt install gh && gh auth login` — lets the agent open
-  PRs/issues directly (`gh pr create`). Plain `git` already works without it.
-- **GitButler**: not available on Android — skip; `git` + `gh` cover it.
-- Heavy browser E2E / Docker stacks: run in cloud sandboxes or CI, not in proot
-  (see `docs/VIBE-PROJECTS.md`).
+## Caveats
+
+- **DNS inside proot**: clones/installs failing silently →
+  `echo 'nameserver 8.8.8.8' > /etc/resolv.conf`
+- **`Node reports platform=android`**: you're on Termux Node; run everything
+  inside the proot distro (the setup refuses Termux Node by design).
+- **Session killed with `signal 9`**: Android 12+ phantom process killer →
+  `termux-wake-lock`, keep Termux in the foreground. Details:
+  `docs/ANDROID-TIPS.md`.
+- **RAM is the limit** on small phones: no browser E2E / Docker stacks in proot
+  (run those in cloud/CI, see `docs/VIBE-PROJECTS.md`).
+- **Security**: the proot container is the real boundary (no `--termux-home`
+  binds); the config adds `share: disabled`, no auto-update, denies
+  world-breaking commands, and asks before touching paths outside the project.
+  Keys stay in `.env`/auth.json — never in `opencode.json`. Threat model:
+  `docs/SECURITY.md`.
+- **GitButler** is not available on Android; use `git` (plus optional `gh` for
+  PRs/issues). Duplicates? `graphify` must be installed with
+  `graphify install --platform opencode`, never bare (targets Claude).
 
 ## Repo layout
 
@@ -147,8 +106,10 @@ Full threat model + honest limits: [docs/SECURITY.md](docs/SECURITY.md).
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
+tests/run-tests.sh           Automated test battery (29 checks)
+tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
+tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits
 docs/ANDROID-TIPS.md         Phantom killer, RAM, background jobs, wakelock
-docs/VIBE-PROJECTS.md        Where the "vibe-coded app safety tools" (pre-commit,
-                             gitleaks, Playwright, Docker stacks...) actually live
+docs/VIBE-PROJECTS.md        Where pre-commit/gitleaks/Playwright/Docker actually belong
 ```
