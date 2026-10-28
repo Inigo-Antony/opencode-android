@@ -217,6 +217,18 @@ OVERRIDE_OUT=$(model_out env GO_MODEL=grok-4.7 GO_SMALL_MODEL=mini)
 chk "model/go-override-main" "opencode-go/grok-4.7" "$(printf '%s\n' "$OVERRIDE_OUT" | sed -n '2p')"
 chk "model/go-override-small" "opencode-go/mini" "$(printf '%s\n' "$OVERRIDE_OUT" | sed -n '3p')"
 
+# 23. per-agent models: plan/build defaults, wired after ECC, never clobbered.
+grepchk "agent-models/wired-plan" 'cfg agent-model plan' "$REPO_DIR/setup-opencode.sh"
+grepchk "agent-models/wired-build" 'cfg agent-model build' "$REPO_DIR/setup-opencode.sh"
+awk '/^detect_go_auth\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" > "$WORK/agents.sh"
+awk '/^write_agent_models\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" >> "$WORK/agents.sh"
+AGENT_OUT=$(HOME="$WORK/mhome" bash -c '. "$1"; cfg(){ echo "$*"; }; write_agent_models' _ "$WORK/agents.sh")
+chk "agent-models/go-plan" "agent-model plan opencode-go/glm-5.3" "$(printf '%s\n' "$AGENT_OUT" | sed -n '1p')"
+chk "agent-models/go-build" "agent-model build opencode-go/glm-5.3-flash" "$(printf '%s\n' "$AGENT_OUT" | sed -n '2p')"
+cfg agent-model plan custom/keep-me >/dev/null
+cfg agent-model plan opencode-go/glm-5.3 >/dev/null
+chk "agent-models/no-clobber" "custom/keep-me" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent.plan.model')"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

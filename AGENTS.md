@@ -10,7 +10,7 @@ Installs and configures OpenCode on Android (Termux + proot-distro Ubuntu). **Sc
 ## Verification
 
 ```bash
-bash tests/run-tests.sh     # the only automated test; exit 0 = pass (55 checks)
+bash tests/run-tests.sh     # the only automated test; exit 0 = pass (60 checks)
 bash -n <script>.sh         # syntax check for any Bash edit
 ```
 
@@ -38,7 +38,7 @@ bash -n <script>.sh         # syntax check for any Bash edit
 ## Conventions that differ from defaults
 
 - `graphify install` **must never be run bare** (it targets Claude); always `graphify install --platform opencode`, then `graphify opencode install`.
-- Model IDs use the `opencode-go/<model>` form; without Go auth the fallback is `opencode/big-pickle`. `OPENCODE_MODEL` always overrides detection; `GO_MODEL`/`GO_SMALL_MODEL` only apply when Go auth is detected.
+- Model IDs use the `opencode-go/<model>` form; without Go auth the fallback is `opencode/big-pickle`. `OPENCODE_MODEL` always overrides detection; `GO_MODEL`/`GO_SMALL_MODEL` only apply when Go auth is detected. Primary agents are pinned by `write_agent_models` after ECC: plan = `glm-5.3`, build = `glm-5.3-flash` (`GO_PLAN_MODEL`/`GO_BUILD_MODEL`), and `cfg agent-model` uses `??=` so a model chosen in `/models` survives re-runs.
 - Secure posture is deliberate: `share: disabled`, `autoupdate: false`, `server.mdns: false`, deny list for destructive bash. Don't relax it in defaults; `UNLOCK=1` is the opt-in.
 - The proot container is the real security boundary; deny rules are a seatbelt. Never add `--termux-home` binds to logins.
 

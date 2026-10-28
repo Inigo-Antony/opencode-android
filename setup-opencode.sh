@@ -10,6 +10,10 @@
 #   OPENCODE_SMALL_MODEL=...      force small model
 #   GO_MODEL=glm-5.3-flash        main model used when OpenCode Go auth is detected
 #   GO_SMALL_MODEL=glm-5.3-flash  small model used when OpenCode Go auth is detected
+#   GO_PLAN_MODEL=glm-5.3         plan agent model (reasoning, still cheap)
+#   GO_BUILD_MODEL=glm-5.3-flash  build agent model (fast coder)
+#   OPENCODE_PLAN_MODEL=...       force the plan agent model
+#   OPENCODE_BUILD_MODEL=...      force the build agent model
 #   SECURITY_PROFILE=secure|keep  secure (default) locks destructive bash + outside
 #                                 reads; keep leaves your permission settings alone
 #   UNLOCK=1                      power-user mode: allow everything, ask nothing
@@ -31,6 +35,9 @@
 #   - If OpenCode Go auth is found (open opencode and run: /connect), the default
 #     model becomes opencode-go/$GO_MODEL and small_model opencode-go/$GO_SMALL_MODEL
 #     (both default to glm-5.3-flash).
+#   - Primary agents get their own defaults: plan = $GO_PLAN_MODEL (glm-5.3,
+#     standard frontier and cheap), build = $GO_BUILD_MODEL (glm-5.3-flash, fast
+#     coder). Tab in the TUI switches between them.
 #   - Otherwise falls back to opencode/big-pickle (free, no key).
 #   - OPENCODE_MODEL always wins.
 
@@ -258,6 +265,11 @@ try {
     const [name] = args; const c = load();
     // hasOwn: inherited keys (__proto__, constructor) must not report a removal.
     if (c.mcp && Object.hasOwn(c.mcp, name)) { delete c.mcp[name]; save(c); console.log('removed: mcp/' + name); }
+  }
+  else if (cmd === 'agent-model') {       // args: name model  (never clobber)
+    const [name, model] = args; const c = load();
+    if (!name || !model) { console.error('usage: cfg agent-model <name> <model>'); process.exit(2); }
+    c.agent ??= {}; c.agent[name] ??= {}; c.agent[name].model ??= model; save(c);
   }
   else if (cmd === 'security') {          // args: secure|unlock|keep
     const [mode] = args; const c = load();
@@ -515,6 +527,31 @@ install_ecc() {
   cfg ecc "$e/.opencode/opencode.json"
 }
 
+# ---------- 5b. per-agent models ----------
+# Plan reasons over a standard frontier model; build writes code with the fast
+# coder. Defaults only: cfg agent-model uses ??=, so a model picked in /models
+# survives re-runs. Runs after ECC so the model lands inside ECC's build agent
+# entry instead of an entry that would shadow it.
+write_agent_models() {
+  local plan_model build_model
+  if [ -n "${OPENCODE_PLAN_MODEL:-}" ]; then
+    plan_model="$OPENCODE_PLAN_MODEL"
+  elif detect_go_auth; then
+    plan_model="opencode-go/${GO_PLAN_MODEL:-glm-5.3}"
+  else
+    plan_model="opencode/big-pickle"
+  fi
+  if [ -n "${OPENCODE_BUILD_MODEL:-}" ]; then
+    build_model="$OPENCODE_BUILD_MODEL"
+  elif detect_go_auth; then
+    build_model="opencode-go/${GO_BUILD_MODEL:-glm-5.3-flash}"
+  else
+    build_model="opencode/big-pickle"
+  fi
+  cfg agent-model plan  "$plan_model"
+  cfg agent-model build "$build_model"
+}
+
 # ---------- 6. MCP servers (all remote, no JSON-inlined secrets) ----------
 install_mcp() {
   log "Adding MCP servers (context7 + parallel-search)"
@@ -650,6 +687,7 @@ if [ "${DOCTOR_ONLY:-0}" != "1" ]; then
   run_step "graphify"               "${SKIP_GRAPHIFY:-0}"  install_graphify
   run_step "repo instructions"      "0"                    write_repo_instructions
   run_step "everything-claude-code" "${SKIP_ECC:-0}"       install_ecc
+  run_step "agent models"           "0"                    write_agent_models
   run_step "MCP servers"            "${SKIP_MCP:-0}"       install_mcp
   run_step "env doctor plugin"      "0"                    write_env_doctor
   run_step "phone extras"           "${SKIP_EXTRAS:-0}"    install_extras
@@ -682,7 +720,8 @@ Ready. Next:
   5. /plan <task>  or  /tdd   # ECC commands; Tab switches primary agents, @planner calls a subagent
 
 Tips:
-  - Go models use the form opencode-go/<model> (e.g. opencode-go/glm-5.3-flash).
+  - Tab switches Build (glm-5.3-flash, fast coder) and Plan (glm-5.3, reasoning).
+    Go models use the form opencode-go/<model>.
     Override anytime:  OPENCODE_MODEL=opencode-go/grok-4.7 bash setup-opencode.sh
   - MCPs: context7 (library docs) + parallel-search (web). Both keyless.
   - Session without approval prompts:  UNLOCK=1 bash setup-opencode.sh   (re-run doctor after: DOCTOR_ONLY=1 bash setup-opencode.sh)
