@@ -5,12 +5,12 @@ Installs and configures OpenCode on Android (Termux + proot-distro Ubuntu). **Sc
 ## The two entrypoints
 
 - `bootstrap.sh` — Termux side. Hard-refuses to run anywhere except Termux (checks `TERMUX_VERSION` / `/data/data/com.termux`). Copies repo files into the container at `/root/opencode-android` and runs `setup-opencode.sh` there.
-- `setup-opencode.sh` — container side. **Must run inside a git repo** (`git rev-parse --show-toplevel` or it exits), and refuses Node reporting `platform=android` (Termux Node; `bootstrap.sh` installs Node 20 from NodeSource). Installs opencode, GSD, graphify, ECC, MCP servers, then validates config.
+- `setup-opencode.sh` — container side. **Must run inside a git repo** (`git rev-parse --show-toplevel` or it exits), and refuses Node reporting `platform=android` (Termux Node; `bootstrap.sh` installs Node 20 from NodeSource). Installs opencode, GSD, graphify, ECC, MCP servers, then validates config. Also persists the tool PATH (`~/.opencode/bin`, `~/.local/bin`, `~/.npm-global/bin`) to `~/.bashrc` + `~/.profile` via `persist_path` — without it, post-setup and agent-spawned shells can't find graphify/opencode (GSD's graphify pre-flight false-negatives "not installed").
 
 ## Verification
 
 ```bash
-bash tests/run-tests.sh     # the only automated test; exit 0 = pass (29 checks)
+bash tests/run-tests.sh     # the only automated test; exit 0 = pass (50 checks)
 bash -n <script>.sh         # syntax check for any Bash edit
 ```
 
@@ -25,6 +25,15 @@ bash -n <script>.sh         # syntax check for any Bash edit
 - **API keys must never appear literally in `opencode.json`** — MCP headers use `{env:VAR}`/`--bearer-env`/`--header` so the value lands at runtime, not in a committable file. `project` mode greps for leaks and tests assert this.
 - The doctor (`DOCTOR_ONLY=1 bash setup-opencode.sh`) strips `SKILL.md` entries from `instructions` (token bloat), keeps `https://` entries, rewrites `{file:}` refs to an existing path, and **exits 3 on unresolved refs**.
 - `templates/security-profile.json` is an auditable mirror of `SECURE_PERMISSION` in `setup-opencode.sh` — keep the two in sync when changing permission rules.
+
+## Efficiency invariants (tested — don't undo)
+
+- **Generated, not tracked:** `opencode.json`, `.opencode/`, `graphify-out/`, and `.planning/graphs/` are gitignored (enforced by `update_gitignore`). Change `setup-opencode.sh`; never hand-edit those artifacts.
+- **PATH persistence:** `persist_path` appends `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global/bin` to `~/.bashrc` + `~/.profile` (idempotent). Tested by extracting the function and running it twice against a temp `HOME`.
+- **Instruction diet:** `.opencode/instructions/INSTRUCTIONS.md` is repo-owned, deliberately ~45 lines (ECC's generic 343-line doc is replaced by `write_repo_instructions`). Loaded every turn and every subagent — keep it under ~90 lines; the test enforces the cap.
+- **Env doctor:** `write_env_doctor` ships `.opencode/plugins/env-doctor.js`, which prepends a `command -v node opencode graphify` probe to the first shell command of a session and prints only missing tools. Turns the PATH-bug class into one visible line.
+- **MCP policy:** only `context7` (library docs) + `parallel-search` (web). Tavily/Exa were retired as duplicates; `cfg mcp-rm` prunes them on every run so existing configs migrate, not just fresh installs.
+- **Bug → test ratchet:** any bug that costs a debugging session gets a check in `tests/run-tests.sh` (see the persist_path and env-doctor checks).
 
 ## Conventions that differ from defaults
 
@@ -45,4 +54,4 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+- This repo gitignores `graphify-out/`, so graph output never appears in a PR diff here. In a repo that does commit `graph.json`, expect a whole-file diff on every build; don't flag it as churn or suggest skipping the rebuild.

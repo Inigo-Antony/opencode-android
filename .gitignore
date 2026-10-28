@@ -2,3 +2,7 @@
 opencode.json
 opencode.json.bak.*
 .opencode/
+.opencode/.tmp-setup/
+.opencode/node_modules/
+graphify-out/
+.planning/graphs/

@@ -11,7 +11,7 @@ awk '/cat > "\$CFG" <<'"'"'JS'"'"'/{f=1;next} f&&/^JS$/{exit} f{print}' \
   "$REPO_DIR/setup-opencode.sh" > "$WORK/cfg.cjs"
 node --check "$WORK/cfg.cjs" || { echo "FAIL: cfg.cjs does not parse"; exit 1; }
 
-PASS=PASS=0; FAIL=0
+PASS=0; FAIL=0
 chk() { # chk "name" expected actual
   if [ "$2" = "$3" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); echo "FAIL: $1  (want [$2] got [$3])"; fi
 }
@@ -75,11 +75,12 @@ chk "unlock-bash-allow" "allow" "$(node -pe 'JSON.parse(require("fs").readFileSy
 cfg security secure >/dev/null
 
 # 8. mcp: header injection with env set
-TAVILY_API_KEY=tv-secret cfg mcp tavily "https://mcp.tavily.com/mcp/" --bearer-env TAVILY_API_KEY >/dev/null
-chk "mcp-tavily/bearer" "Bearer tv-secret" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp.tavily.headers.Authorization')"
-EXA_API_KEY=ex-key cfg mcp exa "https://mcp.exa.ai/mcp" --header x-api-key EXA_API_KEY >/dev/null
-chk "mcp-exa/header" "ex-key" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp.exa.headers["x-api-key"]')"
-chk "mcp-exa/url" "https://mcp.exa.ai/mcp" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp.exa.url')"
+PARALLEL_KEY=pk-secret cfg mcp parallel-search "https://search.parallel.ai/mcp" --bearer-env PARALLEL_KEY >/dev/null
+chk "mcp-parallel/bearer" "Bearer pk-secret" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp["parallel-search"].headers.Authorization')"
+CTX_KEY=ctx-key cfg mcp context7 "https://mcp.context7.com/mcp" --header x-api-key CTX_KEY >/dev/null
+chk "mcp-context7/header" "ctx-key" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp.context7.headers["x-api-key"]')"
+chk "mcp-context7/url" "https://mcp.context7.com/mcp" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).mcp.context7.url')"
+cfg mcp-rm context7 >/dev/null   # test 9 re-adds it fresh (no headers)
 
 # 9. no env -> no headers (fresh server), exists-check idempotent
 cfg mcp context7 "https://mcp.context7.com/mcp" >/dev/null
@@ -131,6 +132,75 @@ chk "doctor/https-kept" "kept" "$(grep -q "https://example.com/x.md" opencode.js
 M=$(echo "$SUMMARY" | grep -c "model=" || true)
 S=$(echo "$SUMMARY" | grep -c "security=" || true)
 if [ "$M" -ge 1 ] && [ "$S" -ge 1 ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); echo "FAIL: doctor summary prints model/security"; fi
+
+# 14. mcp-rm prunes a retired server (migration for existing installs)
+cfg mcp exa "https://mcp.exa.ai/mcp" >/dev/null
+cfg mcp-rm exa >/dev/null
+chk "mcp-rm/exa-removed" "true" "$(node -pe 'const c=JSON.parse(require("fs").readFileSync("opencode.json","utf8"));String(!c.mcp||!c.mcp.exa)')"
+
+# 15. persist_path: extracted from setup, run twice against a temp HOME
+awk '/^persist_path\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" > "$WORK/persist_path.sh"
+mkdir -p "$WORK/home"
+HOME="$WORK/home" bash -c '. "$1"; persist_path; persist_path' _ "$WORK/persist_path.sh"
+chk "persist-path/bashrc" "1" "$(grep -cF '# opencode-android tool PATH' "$WORK/home/.bashrc")"
+chk "persist-path/profile" "1" "$(grep -cF '# opencode-android tool PATH' "$WORK/home/.profile")"
+chk "persist-path/export-line" "1" "$(grep -cF 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"' "$WORK/home/.bashrc")"
+
+# 16. env-doctor plugin: ships, parses, registered, probe has no substitution
+# .mjs: the plugin uses ESM syntax; under Node 20 (the version bootstrap.sh
+# installs) a .js file in a bare temp dir is parsed as CommonJS and fails.
+awk '/cat > \.opencode\/plugins\/env-doctor\.js <<.*JS/{f=1;next} f&&/^JS$/{exit} f{print}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/env-doctor.mjs"
+node --check "$WORK/env-doctor.mjs" || { FAIL=$((FAIL+1)); echo "FAIL: env-doctor.js does not parse"; }
+grepchk "env-doctor/registered" 'cfg plugin add "\.opencode/plugins/env-doctor\.js"' "$REPO_DIR/setup-opencode.sh"
+grepchk "env-doctor/probe" '\[env-doctor\]' "$WORK/env-doctor.mjs"
+awk '/^const REMINDER =/{f=1} f{print} f&&/;$/{exit}' "$WORK/env-doctor.mjs" > "$WORK/reminder.txt"
+if grep -qE '\$\(|`' "$WORK/reminder.txt"; then FAIL=$((FAIL+1)); echo "FAIL: env-doctor probe contains \$( ) or backticks"; else PASS=$((PASS+1)); fi
+
+# 16b. the hook must actually fire (otherwise the plugin is a silent no-op).
+# It probes PATH regardless of graph existence; the only guard is once per
+# session/directory plus wrong-tool silence.
+mkdir -p "$WORK/proj"
+HOOK="$(node --input-type=module -e '
+  const mod = (await import(process.argv[1])).default;
+  const hooks = await mod.server({ directory: process.argv[2] });
+  const fire = (tool) => { const o = { args: { command: "echo hi" } }; return { o, p: hooks["tool.execute.before"]({ tool }, o) }; };
+  const one = fire("bash"); await one.p;
+  const two = fire("bash"); await two.p;
+  const other = fire("read"); await other.p;
+  const ok = one.o.args.command.startsWith("for c in node opencode graphify")
+    && two.o.args.command === "echo hi"
+    && other.o.args.command === "echo hi";
+  console.log(ok ? "true" : "false");
+' "file://$WORK/env-doctor.mjs" "$WORK/proj")"
+chk "env-doctor/hook-fires" "true" "$HOOK"
+
+# 17. repo instructions: shipped, short, registered (token-diet ratchet)
+awk '/cat > \.opencode\/instructions\/INSTRUCTIONS\.md <<.*MD/{f=1;next} f&&/^MD$/{exit} f{print}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/INSTRUCTIONS.md"
+LINES=$(wc -l < "$WORK/INSTRUCTIONS.md")
+if [ "$LINES" -le 90 ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); echo "FAIL: INSTRUCTIONS.md is $LINES lines (max 90)"; fi
+grepchk "instructions/verify-section" 'Verify before claiming done' "$WORK/INSTRUCTIONS.md"
+grepchk "instructions/registered" 'cfg instruction --add \.opencode/instructions/INSTRUCTIONS\.md' "$REPO_DIR/setup-opencode.sh"
+
+# 18. MCP policy: two servers only; retired ones pruned every run
+grepchk "mcp-policy/context7" 'cfg mcp context7' "$REPO_DIR/setup-opencode.sh"
+grepchk "mcp-policy/parallel" 'cfg mcp parallel-search' "$REPO_DIR/setup-opencode.sh"
+nogrepchk "mcp-policy/tavily-retired" 'cfg mcp tavily' "$REPO_DIR/setup-opencode.sh"
+nogrepchk "mcp-policy/exa-retired" 'cfg mcp exa' "$REPO_DIR/setup-opencode.sh"
+grepchk "mcp-policy/prune-tavily" 'cfg mcp-rm tavily' "$REPO_DIR/setup-opencode.sh"
+grepchk "mcp-policy/prune-exa" 'cfg mcp-rm exa' "$REPO_DIR/setup-opencode.sh"
+
+# 19. gitignore generator: graph output stays untracked, idempotently
+awk '/^update_gitignore\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" > "$WORK/gitignore.sh"
+mkdir -p "$WORK/gi"
+( cd "$WORK/gi" && bash -c '. "$1"; update_gitignore; update_gitignore' _ "$WORK/gitignore.sh" )
+chk "gitignore/graphify-out" "1" "$(grep -cxF 'graphify-out/' "$WORK/gi/.gitignore")"
+chk "gitignore/planning-graphs" "1" "$(grep -cxF '.planning/graphs/' "$WORK/gi/.gitignore")"
+
+# 20. mcp-rm ignores inherited Object keys (no phantom removal)
+chk "mcp-rm/prototype-noop" "" "$(cfg mcp-rm constructor 2>/dev/null)"
+chk "mcp-rm/prototype-untouched" "true" "$(node -pe 'const c=JSON.parse(require("fs").readFileSync("opencode.json","utf8"));String(!c.mcp||!Object.hasOwn(c.mcp,"constructor"))')"
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

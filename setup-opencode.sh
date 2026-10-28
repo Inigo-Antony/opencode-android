@@ -14,7 +14,8 @@
 #                                 reads; keep leaves your permission settings alone
 #   UNLOCK=1                      power-user mode: allow everything, ask nothing
 #   ECC_SKILLS=core|all|none      core = 11 essentials (default); all = 300+ skills
-#   ENABLE_CONTEXT7=1 ENABLE_PARALLEL=1 ENABLE_TAVILY=1 ENABLE_EXA=1
+#   ENABLE_CONTEXT7=1 ENABLE_PARALLEL=1   remote MCPs (docs + web search).
+#                                 tavily/exa are retired and pruned on every run.
 #   ENABLE_DCP=1 ENABLE_SHELL_STRATEGY=1   phone QoL extras (context pruning,
 #                                 anti-hang shell rules). 0 disables either.
 #   DOCTOR_ONLY=1                 only repair + validate opencode.json
@@ -23,7 +24,8 @@
 #   opencode.json                merged/validated config (doctor pass)
 #   .opencode/{prompts,commands,skills,instructions}
 #   .opencode/plugins/graphify.js (graphify installer)
-#   .env (optional)              TAVILY_API_KEY / EXA_API_KEY, never committed
+#   .opencode/plugins/env-doctor.js (first-command PATH probe)
+#   .env (optional)              extra env for MCPs/services, never committed
 #
 # Model policy (Go-first, no hardcoded keys):
 #   - If OpenCode Go auth is found (open opencode and run: /connect), the default
@@ -60,6 +62,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export SCRIPT_DIR
 
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+
+# ...and persist that PATH to shell startup files. The export above only covers
+# this script's own process; graphify (pipx/uv/pip --user) and opencode land in
+# ~/.local/bin / ~/.opencode/bin, and every shell started after setup — including
+# the non-interactive ones opencode spawns for agents, and the GSD graphify
+# pre-flight (`gsd-tools.cjs graphify build`) — inherits PATH from the login
+# shell. Without this, a fresh login hits false "graphify is not installed".
+persist_path() {
+  local line='export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"'
+  local marker='# opencode-android tool PATH'
+  local rc
+  for rc in "$HOME/.bashrc" "$HOME/.profile"; do
+    # One unwritable rc (read-only home, immutable dotfile) must not skip the other.
+    touch "$rc" 2>/dev/null || { echo "  ! cannot write $rc" >&2; continue; }
+    if [ -s "$rc" ] && [ -n "$(tail -c 1 "$rc" 2>/dev/null)" ]; then echo >> "$rc"; fi
+    # Guard on the marker as well as the exact line, so a hand-written PATH export
+    # never yields a second marked block on re-runs.
+    grep -qF "$line" "$rc" || printf '%s\n' "$line" >> "$rc"
+    grep -qF "$marker" "$rc" || printf '%s\n' "$marker" >> "$rc"
+  done
+}
 
 # proot often has no writable/working /tmp or TMPDIR from Termux; use a private one
 WORK="$(mktemp -d 2>/dev/null || true)"
@@ -230,6 +253,11 @@ try {
     c.mcp[name] = entry;
     save(c);
   }
+  else if (cmd === 'mcp-rm') {            // args: name  (prune a retired server)
+    const [name] = args; const c = load();
+    // hasOwn: inherited keys (__proto__, constructor) must not report a removal.
+    if (c.mcp && Object.hasOwn(c.mcp, name)) { delete c.mcp[name]; save(c); console.log('removed: mcp/' + name); }
+  }
   else if (cmd === 'security') {          // args: secure|unlock|keep
     const [mode] = args; const c = load();
     c.$schema ??= 'https://opencode.ai/config.json';
@@ -394,6 +422,64 @@ install_graphify() {
   fi
 }
 
+# ---------- 4b. repo instructions (token diet) ----------
+# ECC ships a 343-line generic doc (React/Zod/coverage rules) that does not apply
+# to a Bash-only repo but is loaded into every turn and every subagent. Replace
+# it with a short repo-specific ruleset. install_ecc copies with `cp -Rn` (no
+# clobber), so this file survives later ECC updates; a re-run repairs it if ECC
+# ever overwrites it. Keep it under ~90 lines — it is a per-turn token budget.
+write_repo_instructions() {
+  mkdir -p .opencode/instructions
+  cat > .opencode/instructions/INSTRUCTIONS.md <<'MD'
+# Repo rules (distilled)
+
+Bash-only: `bootstrap.sh` (Termux) and `setup-opencode.sh` (container, embeds
+one Node script `cfg.cjs`). No package manifests, no linters, no CI. Keep this
+file short: it is loaded on every turn.
+
+## Verify before claiming done
+- `bash -n <file>.sh` for every shell file you edited.
+- `bash tests/run-tests.sh` → final line `PASS=<n> FAIL=0`.
+- `DOCTOR_ONLY=1 bash setup-opencode.sh` when config generation changed.
+- Any behavior fix gets a check in `tests/run-tests.sh`. Bug → test, so the
+  class cannot come back.
+
+## Security (non-negotiable)
+- No secrets in code or in `opencode.json`. Use env vars, `{env:VAR}`,
+  `--bearer-env`, or `--header`; values resolve at runtime.
+- Quote shell variables; never interpolate untrusted paths unquoted.
+- Never add `--termux-home` binds: the proot container is the security boundary.
+- Keep secure defaults (share disabled, autoupdate off, mdns off, destructive
+  bash denied). `UNLOCK=1` is the only opt-in.
+- Found a security issue? Stop, fix it, report it.
+
+## Editing rules
+- `.opencode/` and `opencode.json` are generated and gitignored. Change the
+  generator (`setup-opencode.sh`); never hand-edit the artifact.
+- Setup must stay idempotent: re-runs repair config and never clobber a user's
+  model or permission choices (`cfg` uses `??=` deliberately).
+- Read `opencode.json` tolerantly: JSONC comments, trailing commas, and
+  multiple concatenated root objects are merged.
+- Keep `plugin` and `plugins` identical (`syncPlugins()`); OpenCode 1 vs 2.
+- Small, focused edits. No drive-by refactors.
+
+## Token hygiene
+- If `graphify-out/graph.json` exists, query it before grepping source
+  (see AGENTS.md). Prefer targeted reads (`offset`/`limit`) and `rg` over
+  dumping whole files. Summarize tool output instead of pasting it back.
+
+## Git
+- Commit only when asked. Conventional messages: `type: summary`.
+- Never commit secrets, `.opencode/`, `opencode.json`, or `graphify-out/`.
+
+## Agents (use when the job matches)
+- `planner`: multi-file or architectural work, before coding.
+- `tdd-guide`: new behavior, failing test first.
+- `code-reviewer` / `security-reviewer`: after writing code, before commit.
+MD
+  cfg instruction --add .opencode/instructions/INSTRUCTIONS.md
+}
+
 # ---------- 5. everything-claude-code ----------
 copy_nc() { mkdir -p "$2"; cp -Rn "$1/." "$2/" 2>/dev/null || true; }
 
@@ -430,24 +516,66 @@ install_ecc() {
 
 # ---------- 6. MCP servers (all remote, no JSON-inlined secrets) ----------
 install_mcp() {
-  log "Adding MCP servers"
-  [ "${ENABLE_CONTEXT7:-1}" = "1" ]    && cfg mcp context7        "https://mcp.context7.com/mcp"
-  [ "${ENABLE_PARALLEL:-1}" = "1" ]    && cfg mcp parallel-search "https://search.parallel.ai/mcp"
-  if [ "${ENABLE_TAVILY:-1}" = "1" ]; then
-    if [ -n "${TAVILY_API_KEY:-}" ]; then
-      cfg mcp tavily "https://mcp.tavily.com/mcp/" --bearer-env TAVILY_API_KEY
-    else
-      cfg mcp tavily "https://mcp.tavily.com/mcp/"   # keyless Search + Extract
-    fi
-  fi
-  if [ "${ENABLE_EXA:-1}" = "1" ]; then
-    if [ -n "${EXA_API_KEY:-}" ]; then
-      cfg mcp exa "https://mcp.exa.ai/mcp" --header x-api-key EXA_API_KEY
-    else
-      cfg mcp exa "https://mcp.exa.ai/mcp"           # keyless basic access
-    fi
-  fi
+  log "Adding MCP servers (context7 + parallel-search)"
+  # Tavily and Exa only duplicated parallel-search (search + fetch) while each
+  # added a permanent per-turn tool-schema cost. Prune them on every run so a
+  # re-run migrates existing configs, not just fresh installs.
+  cfg mcp-rm tavily >/dev/null || true
+  cfg mcp-rm exa >/dev/null || true
+  [ "${ENABLE_CONTEXT7:-1}" = "1" ] && cfg mcp context7        "https://mcp.context7.com/mcp"
+  [ "${ENABLE_PARALLEL:-1}" = "1" ] && cfg mcp parallel-search "https://search.parallel.ai/mcp"
   return 0
+}
+
+# ---------- 6b. env doctor plugin ----------
+# First-command PATH probe. The graphify install bug (binary present, but no
+# shell PATH entry) cost a whole diagnostic session; this turns that class into
+# one visible line. Written every run, so re-runs repair it. Keep the probe
+# POSIX sh and free of backticks/$( ): it runs inline before the first command.
+write_env_doctor() {
+  mkdir -p .opencode/plugins
+  cat > .opencode/plugins/env-doctor.js <<'JS'
+// env-doctor OpenCode plugin
+// Prepends a PATH probe to the first shell command of a session. Prints one
+// line per missing tool, nothing when healthy. Guards the installer bug class
+// where a binary is written but no shell can find it (see persist_path).
+//
+// One file for both runtimes: OpenCode 2 reads `id` + `setup()`; OpenCode 1
+// reads `server()`. Nothing is imported from an opencode package.
+// Runs regardless of graph presence; the probe is POSIX sh (Linux/Termux).
+//
+// Keep the probe free of backticks and $(...) — it is executed inline.
+const REMINDER =
+  'for c in node opencode graphify; do command -v "$c" >/dev/null 2>&1 || echo "[env-doctor] $c is missing from PATH - run: DOCTOR_ONLY=1 bash setup-opencode.sh"; done ; ';
+
+const location = [...import.meta.url].reduce((hash, ch) => (Math.imul(hash, 31) + ch.charCodeAt(0)) >>> 0, 7);
+const checked = (globalThis.__envDoctorChecked ??= new Set());
+
+export default {
+  id: `env-doctor-${location.toString(16)}`,
+
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      if (event.tool !== "shell" || typeof event.input?.command !== "string") return;
+      if (checked.has(event.sessionID)) return;
+      event.input = { ...event.input, command: REMINDER + event.input.command };
+      checked.add(event.sessionID);
+    });
+  },
+
+  async server({ directory }) {
+    return {
+      "tool.execute.before": async (input, output) => {
+        if (input.tool !== "bash" || typeof output.args?.command !== "string") return;
+        if (checked.has(directory)) return;
+        output.args.command = REMINDER + output.args.command;
+        checked.add(directory);
+      },
+    };
+  },
+};
+JS
+  cfg plugin add ".opencode/plugins/env-doctor.js"
 }
 
 # ---------- 7. phone QoL extras ----------
@@ -482,7 +610,9 @@ apply_security() {
 # ---------- 9. gitignore ----------
 update_gitignore() {
   touch .gitignore
-  for line in 'opencode.json.bak.*' '.opencode/.tmp-setup/' '.opencode/node_modules/' '.env'; do
+  # graphify-out/ is a rebuildable artifact (graphify update .) and .planning/graphs/
+  # holds GSD copies of it; committing either would land an 800K+ diff per build.
+  for line in 'opencode.json.bak.*' '.opencode/.tmp-setup/' '.opencode/node_modules/' '.env' 'graphify-out/' '.planning/graphs/'; do
     grep -qxF "$line" .gitignore || echo "$line" >> .gitignore
   done
 }
@@ -517,10 +647,13 @@ if [ "${DOCTOR_ONLY:-0}" != "1" ]; then
   run_step "security profile"       "0"                    apply_security
   run_step "GSD"                    "${SKIP_GSD:-0}"       install_gsd
   run_step "graphify"               "${SKIP_GRAPHIFY:-0}"  install_graphify
+  run_step "repo instructions"      "0"                    write_repo_instructions
   run_step "everything-claude-code" "${SKIP_ECC:-0}"       install_ecc
   run_step "MCP servers"            "${SKIP_MCP:-0}"       install_mcp
+  run_step "env doctor plugin"      "0"                    write_env_doctor
   run_step "phone extras"           "${SKIP_EXTRAS:-0}"    install_extras
   run_step "gitignore"              "0"                    update_gitignore
+  run_step "PATH persistence"       "0"                    persist_path
 fi
 run_step "config doctor" "0" doctor
 
@@ -550,7 +683,7 @@ Ready. Next:
 Tips:
   - Go models use the form opencode-go/<model> (e.g. opencode-go/kimi-k3).
     Override anytime:  OPENCODE_MODEL=opencode-go/glm-5.3-flash bash setup-opencode.sh
-  - Optional API keys for MCPs go in a git-ignored .env: TAVILY_API_KEY, EXA_API_KEY
+  - MCPs: context7 (library docs) + parallel-search (web). Both keyless.
   - Session without approval prompts:  UNLOCK=1 bash setup-opencode.sh   (re-run doctor after: DOCTOR_ONLY=1 bash setup-opencode.sh)
   - Something broke later?  DOCTOR_ONLY=1 bash setup-opencode.sh
   - Keep this project out of reach? The proot container is your sandbox — do NOT
