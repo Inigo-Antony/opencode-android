@@ -79,17 +79,18 @@ proves you must not give that model auto-approved bash.
 
 ### C1. No key in committable files
 
-    export TAVILY_API_KEY=test-key-0123456789abcdef
+    export MY_SERVICE_KEY=test-key-0123456789abcdef
     bash setup-opencode.sh
-    git add -A && git diff --cached | grep -c "$TAVILY_API_KEY"
+    git add -A && git diff --cached | grep -c "$MY_SERVICE_KEY"
 
 Expected: `0`. Any other number means the key was written to a tracked file.
 
-### C2. Key still reaches the MCP at runtime
-With the key exported, start opencode and confirm the MCP server shows as
-connected. If you changed the config to `{env:TAVILY_API_KEY}`, the variable
-must exist in the shell that launches opencode, so use a launcher that loads
-`.env` first:
+### C2. Key still reaches the service at runtime
+The default config ships only keyless MCPs. If you add your own keyed MCP,
+reference the key through env (`--bearer-env` / `--header`, or `{env:VAR}`)
+rather than inlining it, then start opencode and confirm the server shows as
+connected. The variable must exist in the shell that launches opencode, so use
+a launcher that loads `.env` first:
 
     set -a; . ./.env; set +a; exec opencode "$@"
 

@@ -10,16 +10,16 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 29 checks" src="https://img.shields.io/badge/tests-29%20checks-brightgreen">
+  <img alt="Tests: 52 checks" src="https://img.shields.io/badge/tests-52%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
 ---
 
 Works with an OpenCode Go subscription (auto-detected) or free Big Pickle, no
-key needed. Ships: opencode, GSD, graphify, ECC, MCPs (context7, parallel,
-tavily, exa), dcp context pruning, anti-hang shell rules, secure-by-default
-config.
+key needed. Ships: opencode, GSD, graphify, ECC, MCPs (context7,
+parallel-search), dcp context pruning, an env-doctor PATH probe, lean per-turn
+repo instructions, anti-hang shell rules, secure-by-default config.
 
 ## Install
 
@@ -28,7 +28,7 @@ config.
 2. In Termux:
 
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/main/bootstrap.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/HEAD/bootstrap.sh | bash
    ```
 
    ~1–2 GB storage, ~15 min on Wi-Fi. Installs proot-distro + Ubuntu, the
@@ -47,7 +47,8 @@ config.
 4. Model (one-time inside opencode):
    - OpenCode Go: `/connect` → OpenCode Go → paste key from
      [opencode.ai/console](https://opencode.ai/console), then re-run the setup
-     script once to pick up `opencode-go/kimi-k3` (+ fast `small_model`).
+     script once; the config upgrades to `opencode-go/<model>` (tune with
+     `GO_MODEL` / `GO_SMALL_MODEL`).
    - No subscription: Big Pickle is already set, free, no key.
 
 Manual fallback if the one-liner fails:
@@ -66,8 +67,8 @@ bash /root/opencode-android/setup-opencode.sh   # from your project dir
 ## Verify
 
 After `opencode` launches: `/models` (Go or big-pickle), `/gsd-help`,
-`/graphify .`, MCP servers listed at startup (context7, parallel-search,
-tavily, exa), `@code-reviewer` for ECC subagents.
+`/graphify .`, MCP servers listed at startup (context7, parallel-search),
+`@code-reviewer` for ECC subagents.
 
 | Test | What it does |
 | --- | --- |
@@ -90,9 +91,9 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
 | `OPENCODE_MODEL` / `OPENCODE_SMALL_MODEL` | Force models, e.g. `opencode-go/grok-4.7` |
 | `GO_MODEL` / `GO_SMALL_MODEL` | Models when a Go subscription is detected (default `kimi-k3` / `glm-5.3-flash`) |
 | `ECC_SKILLS=all\|none` | ECC skills: all 300+, or none (default: 11 core) |
-| `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / tavily / exa / dcp / shell-strategy |
+| `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / dcp / shell-strategy |
 | `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1` | Skip a component |
-| `TAVILY_API_KEY`, `EXA_API_KEY` | Put in git-ignored `.env`; wired as MCP headers, never inlined into JSON |
+| `.env` | Optional env for MCPs/services; git-ignored, loaded by setup. Keys never land in `opencode.json` |
 
 ## Caveats
 
@@ -119,7 +120,7 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (29 checks)
+tests/run-tests.sh           Automated test battery (52 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits

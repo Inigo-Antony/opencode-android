@@ -4,8 +4,9 @@
 # Installs proot-distro + Ubuntu, drops the opencode-android files into the
 # container, and runs setup-opencode.sh inside it — in one shot.
 #
-# One-liner (replace YOUR-USER with the repo owner):
-#   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/main/bootstrap.sh | bash
+# One-liner (replace YOUR-USER with the repo owner). HEAD follows the repo's
+# default branch, so forks work whether they use main, master or anything else:
+#   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/HEAD/bootstrap.sh | bash
 #
 # Repo override:
 #   OC_ANDROID_REPO=https://github.com/YOUR-USER/opencode-android bootstrap.sh
@@ -18,7 +19,8 @@ set -uo pipefail
 
 DISTRO="${OC_ANDROID_DISTRO:-ubuntu}"
 REPO_URL="${OC_ANDROID_REPO:-https://github.com/YOUR-USER/opencode-android}"
-BRANCH="${OC_ANDROID_BRANCH:-main}"
+# Empty = clone the remote's default branch (works for main, master, ...).
+BRANCH="${OC_ANDROID_BRANCH:-}"
 
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; }
@@ -67,7 +69,11 @@ proot-distro login "$DISTRO" -- /bin/bash -lc "set -e
   if [ -d /root/opencode-android ]; then
     cd /root/opencode-android && bash setup-opencode.sh
   else
-    git clone --depth 1 -b $BRANCH $REPO_URL /root/opencode-android
+    if [ -n "$BRANCH" ]; then
+      git clone --depth 1 -b "$BRANCH" "$REPO_URL" /root/opencode-android
+    else
+      git clone --depth 1 "$REPO_URL" /root/opencode-android
+    fi
     cd /root/opencode-android && bash setup-opencode.sh
   fi
 "

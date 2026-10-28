@@ -44,8 +44,8 @@ explicit overwrite; `SECURITY_PROFILE=keep` changes nothing).
   saved to `auth.json` inside the container) — never in JSON you might commit.
 - MCP keys go in `.env` (auto added to `.gitignore`) and are attached as request
   headers at startup. We do **not** put `{env:...}` substitutions into MCP URLs:
-  Tavily URLs with URL-embedded env keys are known to break OpenCode's
-  substitution, and keys hard-coded into config files end up in commits.
+  URL-embedded env keys are known to break OpenCode's substitution, and keys
+  hard-coded into config files end up in commits.
 - `share` disabled + `.env` git-ignored means one-vector prompt exfiltration
   (model quoting your secrets into a shared/webfetched page) has fewer channels.
 

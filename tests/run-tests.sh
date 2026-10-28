@@ -202,6 +202,13 @@ chk "gitignore/planning-graphs" "1" "$(grep -cxF '.planning/graphs/' "$WORK/gi/.
 chk "mcp-rm/prototype-noop" "" "$(cfg mcp-rm constructor 2>/dev/null)"
 chk "mcp-rm/prototype-untouched" "true" "$(node -pe 'const c=JSON.parse(require("fs").readFileSync("opencode.json","utf8"));String(!c.mcp||!Object.hasOwn(c.mcp,"constructor"))')"
 
+# 21. README test-count ratchet: the badge and the repo-layout line must match
+# the real suite size, so docs cannot drift stale again (they said "29 checks"
+# long after the suite passed that). EXPECTED includes these two checks.
+EXPECTED=$((PASS+2))
+chk "readme/badge-count" "$EXPECTED" "$(sed -n 's|.*badge/tests-\([0-9]*\)%20checks.*|\1|p' "$REPO_DIR/README.md")"
+chk "readme/layout-count" "$EXPECTED" "$(sed -n 's|.*Automated test battery (\([0-9]*\) checks).*|\1|p' "$REPO_DIR/README.md")"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
