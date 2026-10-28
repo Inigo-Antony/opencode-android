@@ -110,9 +110,8 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
   world-breaking commands, and asks before touching paths outside the project.
   Keys stay in `.env`/auth.json — never in `opencode.json`. Threat model:
   `docs/SECURITY.md`.
-- **GitButler** is not available on Android; use `git` (plus optional `gh` for
-  PRs/issues). Duplicates? `graphify` must be installed with
-  `graphify install --platform opencode`, never bare (targets Claude).
+- `graphify` must be installed with `graphify install --platform opencode`,
+  never bare (it targets Claude by default).
 
 ## Repo layout
 

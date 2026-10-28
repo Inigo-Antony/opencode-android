@@ -1,0 +1,4 @@
+.env
+opencode.json
+opencode.json.bak.*
+.opencode/
