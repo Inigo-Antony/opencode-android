@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 60 checks" src="https://img.shields.io/badge/tests-60%20checks-brightgreen">
+  <img alt="Tests: 66 checks" src="https://img.shields.io/badge/tests-66%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -26,7 +26,10 @@ anti-hang shell rules, secure-by-default config.
 
 1. Install [Termux from F-Droid](https://f-droid.org/en/packages/com.termux/)
    (not Play Store).
-2. In Termux:
+2. In Termux (replace `YOUR-USER` with your GitHub username; the repo or your
+   fork must be **public** — GitHub's raw 404s private repos, and a private
+   repo cannot be forked. Got a 404? Clone the repo locally and run its
+   `bootstrap.sh` instead):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/HEAD/bootstrap.sh | bash
@@ -82,8 +85,9 @@ After `opencode` launches: `/models` (Go or big-pickle), `/gsd-help`,
 | `tests/MANUAL-TESTS.md` | Behavioral tests the scripts can't cover (agent prompt-injection, canary, permission prompts) |
 
 Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
-`DOCTOR_ONLY=1 bash setup-opencode.sh` only repairs/validates (backups go to
-`opencode.json.bak.*`). Config broke after manual edits? Run the doctor.
+`DOCTOR_ONLY=1 bash setup-opencode.sh` only repairs/validates (a rolling
+backup lands in `opencode.json.bak.*`, newest kept). Config broke after
+manual edits? Run the doctor.
 
 ## Tuning
 
@@ -124,10 +128,14 @@ Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (60 checks)
+tests/run-tests.sh           Automated test battery (66 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits
 docs/ANDROID-TIPS.md         Phantom killer, RAM, background jobs, wakelock
 docs/VIBE-PROJECTS.md        Where pre-commit/gitleaks/Playwright/Docker actually belong
 ```
+
+## License
+
+[MIT](LICENSE) © Inigo Antony
