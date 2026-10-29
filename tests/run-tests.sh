@@ -229,6 +229,39 @@ cfg agent-model plan custom/keep-me >/dev/null
 cfg agent-model plan opencode-go/glm-5.3 >/dev/null
 chk "agent-models/no-clobber" "custom/keep-me" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent.plan.model')"
 
+# 24. bootstrap: "already installed?" must see BOTH proot-distro layouts.
+# The 2026 Python rewrite moved containers from installed-rootfs/<alias> to
+# containers/<name>/rootfs; checking one path made `install` fail with
+# "container 'X' already exists" on setups holding the other layout.
+awk '/^container_installed\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' \
+  "$REPO_DIR/bootstrap.sh" > "$WORK/pd.sh"
+mkdir -p "$WORK/pd/installed-rootfs/ubuntu"
+chk "pd/legacy-layout" "0" "$(DISTRO=ubuntu PD_ROOT="$WORK/pd" bash -c '. "$1"; container_installed' _ "$WORK/pd.sh" >/dev/null 2>&1; echo $?)"
+rm -rf "$WORK/pd"; mkdir -p "$WORK/pd/containers/ubuntu/rootfs"
+chk "pd/new-layout" "0" "$(DISTRO=ubuntu PD_ROOT="$WORK/pd" bash -c '. "$1"; container_installed' _ "$WORK/pd.sh" >/dev/null 2>&1; echo $?)"
+rm -rf "$WORK/pd"
+mkdir -p "$WORK/nopath"  # stub shadows any real proot-distro: name never matches
+printf '#!/bin/sh\necho definitely-not-ubuntu\n' > "$WORK/nopath/proot-distro"
+chmod +x "$WORK/nopath/proot-distro"
+chk "pd/absent" "1" "$(DISTRO=ubuntu PD_ROOT="$WORK/pd" PATH="$WORK/nopath:$PATH" bash -c '. "$1"; container_installed' _ "$WORK/pd.sh" >/dev/null 2>&1; echo $?)"
+rm -rf "$WORK/pd"
+mkdir -p "$WORK/pdbin"
+printf '#!/bin/sh\necho alpine\necho ubuntu\n' > "$WORK/pdbin/proot-distro"
+chmod +x "$WORK/pdbin/proot-distro"
+chk "pd/list-fallback" "0" "$(DISTRO=ubuntu PD_ROOT="$WORK/pd" PATH="$WORK/pdbin:$PATH" bash -c '. "$1"; container_installed' _ "$WORK/pd.sh" >/dev/null 2>&1; echo $?)"
+
+# 25. config backup is rolling: a run keeps only the newest opencode.json.bak.*
+# (previously every install/re-run stamped a new backup forever).
+awk '/^backup_config\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/backup.sh"
+mkdir -p "$WORK/bk"
+BKOUT="$( cd "$WORK/bk" && echo '{}' > opencode.json \
+    && touch opencode.json.bak.00000101000000 opencode.json.bak.00000101000001 \
+    && log() { :; } && . "$WORK/backup.sh" && backup_config >/dev/null \
+    && printf '%s\n' opencode.json.bak.* )"
+chk "bkprune/keep-one" "1" "$(printf '%s\n' "$BKOUT" | grep -c .)"
+chk "bkprune/seed-gone" "0" "$(printf '%s' "$BKOUT" | grep -c '00000101')"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.
