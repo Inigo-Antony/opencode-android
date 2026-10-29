@@ -360,6 +360,10 @@ backup_config() {
   local b
   b="opencode.json.bak.$(date +%Y%m%d-%H%M%S)"
   cp opencode.json "$b" && log "Backed up existing config to $b"
+  # Rolling: every run stamps a fresh backup, keep only the newest one.
+  # shellcheck disable=SC2012  # ls -1t is enough for timestamped names
+  ls -1t opencode.json.bak.* 2>/dev/null | tail -n +2 |
+    while IFS= read -r old; do rm -f "$old"; done
 }
 
 # ---------- 1. opencode ----------
