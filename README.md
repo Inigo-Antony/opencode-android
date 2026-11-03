@@ -26,13 +26,9 @@ anti-hang shell rules, secure-by-default config.
 
 1. Install [Termux from F-Droid](https://f-droid.org/en/packages/com.termux/)
    (not Play Store).
-2. In Termux (replace `YOUR-USER` with your GitHub username; the repo or your
-   fork must be **public** — GitHub's raw 404s private repos, and a private
-   repo cannot be forked. Got a 404? Clone the repo locally and run its
-   `bootstrap.sh` instead):
-
+2. In Termux:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/HEAD/bootstrap.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/Inigo-Antony/opencode-android/HEAD/bootstrap.sh | bash
    ```
 
    ~1–2 GB storage, ~15 min on Wi-Fi. Installs proot-distro + Ubuntu, the
@@ -66,7 +62,7 @@ proot-distro install ubuntu && proot-distro login ubuntu
 # Ubuntu (inside)
 apt update && apt install -y curl git python3-pip pipx
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs
-git clone https://github.com/YOUR-USER/opencode-android /root/opencode-android
+git clone https://github.com/Inigo-Antony/opencode-android /root/opencode-android
 bash /root/opencode-android/setup-opencode.sh   # from your project dir
 ```
 
