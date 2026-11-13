@@ -30,7 +30,9 @@ Written by the setup script (auditable copy: `templates/security-profile.json`):
 - `bash` deny-list for world-breaking commands: `rm -rf /*`, `rm -rf ~*`, `dd …`,
   `mkfs*`, `chmod -R 777 …`, `shutdown`/`reboot`
 - `external_directory: ask` — reading/writing anything outside the project
-  directory requires you to tap approve (template/tmp dirs allowed)
+  directory requires you to tap approve (template/tmp dirs and opencode's own
+  ensemble worktrees under `~/.local/share/opencode/worktree/` are allowed —
+  the parallel-team plugin works there by design)
 - `share: "disabled"` — opencode cannot publish your session/prompts
 - `autoupdate: false` — no silent binary replacement mid-flight
 - `server.mdns: false` — no service broadcasting on LAN

@@ -22,6 +22,9 @@
 #                                 tavily/exa are retired and pruned on every run.
 #   ENABLE_DCP=1 ENABLE_SHELL_STRATEGY=1   phone QoL extras (context pruning,
 #                                 anti-hang shell rules). 0 disables either.
+#   ENABLE_ENSEMBLE=0             no @hueyexe/opencode-ensemble@0.18.0 plugin
+#                                 (parallel agent teams, pinned version)
+#   SKIP_OBSIDIAN_SKILLS=1        skip kepano/obsidian-skills (global skills)
 #   DOCTOR_ONLY=1                 only repair + validate opencode.json
 #
 # Layout it produces, per project:
@@ -205,7 +208,10 @@ const SECURE_PERMISSION = {
   external_directory: {
     '*': 'ask',
     '/tmp/*': 'allow',
-    '/var/tmp/*': 'allow'
+    '/var/tmp/*': 'allow',
+    // ensemble teammates work in opencode's own worktrees; the plugin requires
+    // this or every file op there prompts (see @hueyexe/opencode-ensemble)
+    '~/.local/share/opencode/worktree/**': 'allow'
   }
 };
 const UNLOCKED_PERMISSION = {
@@ -281,6 +287,13 @@ try {
     }
     else if (mode === 'secure') {
       c.permission ??= SECURE_PERMISSION;      // explicit user settings win
+      // ??= per key, like share/autoupdate below: the ensemble worktree
+      // carve-out ships with the secure profile and existing installs get
+      // it too — never overwriting a rule the user set.
+      if (c.permission && typeof c.permission === 'object' && !Array.isArray(c.permission)) {
+        c.permission.external_directory ??= {};
+        c.permission.external_directory['~/.local/share/opencode/worktree/**'] ??= 'allow';
+      }
       c.share ??= 'disabled';
       c.autoupdate ??= false;
       c.server ??= {}; c.server.mdns ??= false;
@@ -620,18 +633,68 @@ JS
   cfg plugin add ".opencode/plugins/env-doctor.js"
 }
 
-# ---------- 7. phone QoL extras ----------
+# ---------- 7. extras: phone QoL + parallel teams ----------
 install_extras() {
-  log "Adding phone QoL extras"
+  log "Adding phone QoL extras + ensemble"
   if [ "${ENABLE_DCP:-1}" = "1" ]; then
     # dynamic context pruning: prunes stale tool outputs (huge for small RAM / mobile sessions)
     cfg plugin add "@tarquinen/opencode-dcp" && log "  dcp enabled"
+  fi
+  if [ "${ENABLE_ENSEMBLE:-1}" = "1" ]; then
+    # parallel agent teams (worktrees + shared task board). Pinned: unpinned
+    # npm plugins are cached once and never auto-update (opencode bug #6774).
+    cfg plugin add "@hueyexe/opencode-ensemble@0.18.0" && log "  ensemble enabled (pinned 0.18.0)"
   fi
   if [ "${ENABLE_SHELL_STRATEGY:-1}" = "1" ]; then
     # non-interactive shell rules: stops agents hanging on TTY prompts (common in proot)
     cfg instruction --add "$SHELL_STRATEGY_URL" && log "  shell-strategy instructions enabled"
   fi
   return 0
+}
+
+# ---------- 7b. obsidian skills (global) ----------
+# obsidianmd/obsidian-skills: agent skills for the Obsidian CLI and open formats
+# (Markdown, Bases, JSON Canvas). Upstream's README install path is not in
+# opencode's discovery table; opencode discovers global skills in
+# ~/.config/opencode/skills (the graphify skill lives there too). Clone the
+# FULL repo — upstream warns not to copy just the inner folder. SKILL.md files
+# sit at obsidian-skills/plugins/obsidian/skills/<name>/SKILL.md
+# (auto-discovered, no config changes needed).
+install_obsidian_skills() {
+  local d="$HOME/.config/opencode/skills/obsidian-skills"
+  if [ -d "$d/.git" ]; then
+    log "Updating obsidian-skills"
+    git -C "$d" pull --ff-only || warn "obsidian-skills update failed (keeping existing copy)"
+    log "  obsidian-skills @ $(git -C "$d" rev-parse --short HEAD 2>/dev/null)"
+    return 0
+  fi
+  log "Installing obsidian-skills (global: ~/.config/opencode/skills)"
+  rm -rf "$d"
+  git clone --depth 1 -q https://github.com/obsidianmd/obsidian-skills.git "$d" || {
+    warn "git clone of obsidian-skills failed"; return 1; }
+  [ -d "$d/plugins/obsidian/skills" ] || { warn "obsidian-skills clone is missing plugins/obsidian/skills"; return 1; }
+  log "  $(find "$d/plugins/obsidian/skills" -name SKILL.md | wc -l) skills @ $(git -C "$d" rev-parse --short HEAD 2>/dev/null)"
+}
+
+# ---------- 7c. project-notes placeholder in AGENTS.md ----------
+# AGENTS.md is auto-loaded every turn. graphify owns its section; give the user
+# a stable, hand-editable spot for project-specific facts the agent should
+# know. Marker-guarded so re-runs never duplicate it and never touch anything
+# the user wrote.
+ensure_project_notes() {
+  local f="AGENTS.md" marker='## Project notes (fill me in)'
+  [ -f "$f" ] || printf '# AGENTS.md\n' > "$f"
+  grep -qF "$marker" "$f" || cat >> "$f" <<'MD'
+
+## Project notes (fill me in)
+<!-- Setup left this placeholder: write anything an agent should know about
+     THIS project — stack, build/test commands, key paths, conventions,
+     what "done" means, and what must never be touched. -->
+- Stack / runtime:
+- Build / test commands:
+- Key entry points and paths:
+- Conventions and hard limits:
+MD
 }
 
 # ---------- 8. security profile ----------
@@ -695,9 +758,11 @@ if [ "${DOCTOR_ONLY:-0}" != "1" ]; then
   run_step "MCP servers"            "${SKIP_MCP:-0}"       install_mcp
   run_step "env doctor plugin"      "0"                    write_env_doctor
   run_step "phone extras"           "${SKIP_EXTRAS:-0}"    install_extras
+  run_step "obsidian skills"        "${SKIP_OBSIDIAN_SKILLS:-0}" install_obsidian_skills
   run_step "gitignore"              "0"                    update_gitignore
   run_step "PATH persistence"       "0"                    persist_path
 fi
+run_step "project notes" "0" ensure_project_notes
 run_step "config doctor" "0" doctor
 
 echo
@@ -728,6 +793,11 @@ Tips:
     Go models use the form opencode-go/<model>.
     Override anytime:  OPENCODE_MODEL=opencode-go/grok-4.7 bash setup-opencode.sh
   - MCPs: context7 (library docs) + parallel-search (web). Both keyless.
+  - Plugins: dcp (context pruning) + ensemble (parallel agent teams, pinned
+    @0.18.0; teammates work in ~/.local/share/opencode/worktree — pre-allowed
+    in the secure profile). Skills: ECC core + obsidian-skills (global).
+  - Project-specific facts for agents (stack, commands, quirks): write them
+    under "## Project notes" in AGENTS.md — it is loaded every turn.
   - Session without approval prompts:  UNLOCK=1 bash setup-opencode.sh   (re-run doctor after: DOCTOR_ONLY=1 bash setup-opencode.sh)
   - Something broke later?  DOCTOR_ONLY=1 bash setup-opencode.sh
   - Keep this project out of reach? The proot container is your sandbox — do NOT

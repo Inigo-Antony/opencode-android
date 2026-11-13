@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 66 checks" src="https://img.shields.io/badge/tests-66%20checks-brightgreen">
+  <img alt="Tests: 85 checks" src="https://img.shields.io/badge/tests-85%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -19,8 +19,10 @@
 Works with an OpenCode Go subscription (auto-detected) or free Big Pickle, no
 key needed. Ships: opencode, GSD, graphify, ECC, MCPs (context7,
 parallel-search), per-agent models (plan = `glm-5.3`, build = `glm-5.3-flash`),
-dcp context pruning, an env-doctor PATH probe, lean per-turn repo instructions,
-anti-hang shell rules, secure-by-default config.
+dcp context pruning, ensemble parallel agent teams (pinned), obsidian-skills
+(global), an env-doctor PATH probe, lean per-turn repo
+instructions, anti-hang shell rules, secure-by-default config, and a
+"Project notes" placeholder in AGENTS.md for your own project facts.
 
 ## Install
 
@@ -95,8 +97,9 @@ manual edits? Run the doctor.
 | `GO_MODEL` / `GO_SMALL_MODEL` | Main/small models when a Go subscription is detected (both default to `glm-5.3-flash`) |
 | `GO_PLAN_MODEL` / `GO_BUILD_MODEL` | Per-agent defaults when Go is detected (`glm-5.3` / `glm-5.3-flash`) |
 | `ECC_SKILLS=all\|none` | ECC skills: all 300+, or none (default: 11 core) |
+| `ENABLE_ENSEMBLE=0` | No `@hueyexe/opencode-ensemble` plugin (parallel agent teams) |
 | `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / dcp / shell-strategy |
-| `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1` | Skip a component |
+| `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1`, `SKIP_OBSIDIAN_SKILLS=1` | Skip a component |
 | `.env` | Optional env for MCPs/services; git-ignored, loaded by setup. Keys never land in `opencode.json` |
 
 ## Caveats
@@ -117,6 +120,21 @@ manual edits? Run the doctor.
   `docs/SECURITY.md`.
 - `graphify` must be installed with `graphify install --platform opencode`,
   never bare (it targets Claude by default).
+- **Ensemble (parallel teams)**: teammates work in git worktrees under
+  `~/.local/share/opencode/worktree/` — pre-allowed in the secure profile so
+  their file operations don't prompt. The plugin needs a sqlite-capable runtime
+  (Bun or Node ≥ 24 for `node:sqlite`); the native opencode binary ships Bun,
+  so default installs are fine. The version is pinned (`0.18.0`) because
+  unpinned npm plugins are cached once and never auto-update (opencode #6774).
+- **obsidian-skills** (`obsidianmd/obsidian-skills`) installs globally to
+  `~/.config/opencode/skills/` — the path opencode actually discovers (the
+  upstream README's install path is not in opencode's discovery table). The
+  FULL repo is cloned: SKILL.md files sit at
+  `obsidian-skills/plugins/obsidian/skills/<name>/`. Re-runs `git pull
+  --ff-only` the clone and logs the HEAD SHA so the running revision stays
+  auditable. Unlike the ensemble plugin, the clone tracks upstream `main` —
+  skills run with agent privileges, so pin a commit manually if upstream
+  drift concerns you.
 
 ## Repo layout
 
@@ -124,7 +142,7 @@ manual edits? Run the doctor.
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (66 checks)
+tests/run-tests.sh           Automated test battery (85 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits

@@ -10,7 +10,7 @@ Installs and configures OpenCode on Android (Termux + proot-distro Ubuntu). **Sc
 ## Verification
 
 ```bash
-bash tests/run-tests.sh     # the only automated test; exit 0 = pass (66 checks)
+bash tests/run-tests.sh     # the only automated test; exit 0 = pass (85 checks)
 bash -n <script>.sh         # syntax check for any Bash edit
 ```
 
@@ -21,10 +21,13 @@ bash -n <script>.sh         # syntax check for any Bash edit
 
 - `opencode.json` is parsed **tolerantly**: JSONC comments, trailing commas, and **multiple concatenated `{...}` root objects are merged**. Never assume strict-JSON semantics when reading or writing it.
 - **`plugin` and `plugins` keys must always be kept identical** in the generated config (`syncPlugins()`); OpenCode 1 reads `plugin`, OpenCode 2 reads `plugins`.
-- `setup-opencode.sh` must stay **idempotent**: re-running repairs `opencode.json` every time. `cfg base` uses `??=` so an existing `model` is never clobbered (except `--replace-default` swaps the `opencode/big-pickle` fallback); `cfg security secure` uses `??=` so user permission rules win; `cfg security unlock` overwrites.
+- `setup-opencode.sh` must stay **idempotent**: re-running repairs `opencode.json` every time. `cfg base` uses `??=` so an existing `model` is never clobbered (except `--replace-default` swaps the `opencode/big-pickle` fallback); `cfg security secure` uses `??=` so user permission rules win, and migrates the `~/.local/share/opencode/worktree/**` allow rule (ensemble carve-out) into existing configs per-key without overwriting anything the user set; `cfg security unlock` overwrites.
 - **API keys must never appear literally in `opencode.json`** — MCP headers use `{env:VAR}`/`--bearer-env`/`--header` so the value lands at runtime, not in a committable file. `project` mode greps for leaks and tests assert this.
 - The doctor (`DOCTOR_ONLY=1 bash setup-opencode.sh`) strips `SKILL.md` entries from `instructions` (token bloat), keeps `https://` entries, rewrites `{file:}` refs to an existing path, and **exits 3 on unresolved refs**.
-- `templates/security-profile.json` is an auditable mirror of `SECURE_PERMISSION` in `setup-opencode.sh` — keep the two in sync when changing permission rules.
+- `templates/security-profile.json` is an auditable mirror of `SECURE_PERMISSION` in `setup-opencode.sh` — kept in sync automatically (test compares them deep-equal on a fresh config; drift fails the suite).
+- **Ensemble plugin is pinned** (`@hueyexe/opencode-ensemble@0.18.0` in `install_extras`, behind `ENABLE_ENSEMBLE`): unpinned npm plugins are cached once and never auto-update (opencode #6774).
+- **obsidian-skills is global** at `~/.config/opencode/skills/obsidian-skills` — NOT the upstream README's install path, which is not in opencode's discovery table. Upstream repo is `obsidianmd/obsidian-skills` (renamed from kepano); SKILL.md files sit at `obsidian-skills/plugins/obsidian/skills/<name>/`. Re-runs `git pull --ff-only` the clone and logs the HEAD SHA; never mention or write the stale path anywhere.
+- **AGENTS.md project-notes placeholder**: `ensure_project_notes` runs on every setup (even `DOCTOR_ONLY`) and appends a marker-guarded `## Project notes` section — the user's hand-editable spot for project facts. Marker-guarded: never duplicate it, never touch user edits.
 
 ## Efficiency invariants (tested — don't undo)
 
@@ -54,4 +57,13 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- This repo gitignores `graphify-out/`, so graph output never appears in a PR diff here. In a repo that does commit `graph.json`, expect a whole-file diff on every build; don't flag it as churn or suggest skipping the rebuild.
+- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+## Project notes (fill me in)
+<!-- Setup left this placeholder: write anything an agent should know about
+     THIS project — stack, build/test commands, key paths, conventions,
+     what "done" means, and what must never be touched. -->
+- Stack / runtime:
+- Build / test commands:
+- Key entry points and paths:
+- Conventions and hard limits:

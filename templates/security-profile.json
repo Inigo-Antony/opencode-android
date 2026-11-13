@@ -33,7 +33,8 @@
     "external_directory": {
       "*": "ask",
       "/tmp/*": "allow",
-      "/var/tmp/*": "allow"
+      "/var/tmp/*": "allow",
+      "~/.local/share/opencode/worktree/**": "allow"
     }
   }
 }

@@ -262,6 +262,68 @@ BKOUT="$( cd "$WORK/bk" && echo '{}' > opencode.json \
 chk "bkprune/keep-one" "1" "$(printf '%s\n' "$BKOUT" | grep -c .)"
 chk "bkprune/seed-gone" "0" "$(printf '%s' "$BKOUT" | grep -c '00000101')"
 
+# 26. ensemble plugin: pinned entry, deduped, synced to both keys, wired
+cfg plugin add "@hueyexe/opencode-ensemble@0.18.0" >/dev/null
+cfg plugin add "@hueyexe/opencode-ensemble@0.18.0" >/dev/null
+chk "ensemble/pinned-single" "1" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).plugin.filter(p=>p==="@hueyexe/opencode-ensemble@0.18.0").length')"
+chk "ensemble/keys-synced" "yes" "$(node -pe 'const c=JSON.parse(require("fs").readFileSync("opencode.json","utf8"));JSON.stringify(c.plugin)===JSON.stringify(c.plugins)?"yes":"mismatch"')"
+grepchk "ensemble/wired" 'cfg plugin add "@hueyexe/opencode-ensemble@0.18.0"' "$REPO_DIR/setup-opencode.sh"
+grepchk "ensemble/guard" 'ENABLE_ENSEMBLE:-1' "$REPO_DIR/setup-opencode.sh"
+
+# 27. secure profile ships the ensemble worktree carve-out; template mirror
+# stays a byte-level mirror of what cfg security secure writes on a fresh config
+rm -f opencode.json
+cfg security secure >/dev/null
+chk "secure/worktree-allow" "allow" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).permission.external_directory["~/.local/share/opencode/worktree/**"]')"
+chk "secure/template-mirror" "in-sync" "$(node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync("opencode.json","utf8"));const t=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log(JSON.stringify(c.permission)===JSON.stringify(t.permission)?"in-sync":"drift")' "$REPO_DIR/templates/security-profile.json")"
+# migration: existing explicit permission gains the key without losing user rules
+node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync("opencode.json","utf8"));c.permission.external_directory={"/var/tmp/*":"ask"};fs.writeFileSync("opencode.json",JSON.stringify(c))'
+cfg security secure >/dev/null
+chk "secure/migrate-worktree" "allow" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).permission.external_directory["~/.local/share/opencode/worktree/**"]')"
+chk "secure/migrate-keeps-user" "ask" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).permission.external_directory["/var/tmp/*"]')"
+
+# 28. obsidian-skills: global ~/.config path (the upstream README's install
+# path is not in opencode's discovery table), clone once then pull on re-runs
+awk '/^install_obsidian_skills\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/obsidian.sh"
+mkdir -p "$WORK/ostub"
+cat > "$WORK/ostub/git" <<'STUB'
+#!/bin/sh
+echo "$*" >> "$GIT_LOG"
+d=""
+for a in "$@"; do case "$a" in /*) d="$a";; esac; done
+case " $* " in *" clone "*) [ -n "$d" ] && mkdir -p "$d/.git" "$d/plugins/obsidian/skills" ;; esac
+exit 0
+STUB
+chmod +x "$WORK/ostub/git"
+: > "$WORK/git.log"
+mkdir -p "$WORK/ohome"
+HOME="$WORK/ohome" GIT_LOG="$WORK/git.log" PATH="$WORK/ostub:$PATH" \
+  bash -c '. "$1"; install_obsidian_skills >/dev/null 2>&1; install_obsidian_skills >/dev/null 2>&1' _ "$WORK/obsidian.sh"
+chk "obsidian/clone-once" "1" "$(grep -c '^clone ' "$WORK/git.log")"
+chk "obsidian/pull-on-rerun" "1" "$(grep -c 'pull --ff-only' "$WORK/git.log")"
+chk "obsidian/global-path" "1" "$(grep -c 'config/opencode/skills/obsidian-skills$' "$WORK/git.log")"
+chk "obsidian/upstream-url" "1" "$(grep -c 'https://github.com/obsidianmd/obsidian-skills.git' "$WORK/git.log")"
+nogrepchk "obsidian/no-stale-path" '\.opencode/skills' "$WORK/obsidian.sh"
+grepchk "obsidian/step-wired" 'SKIP_OBSIDIAN_SKILLS:-0' "$REPO_DIR/setup-opencode.sh"
+
+# 29. AGENTS.md project-notes placeholder: marker-guarded, appended once,
+# works on a missing AGENTS.md too (runs on every setup, even DOCTOR_ONLY)
+awk '/^ensure_project_notes\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/notes.sh"
+mkdir -p "$WORK/nhome"
+(cd "$WORK/nhome" && HOME="$WORK/nhome" bash -c '. "$1"; ensure_project_notes >/dev/null 2>&1; ensure_project_notes >/dev/null 2>&1' _ "$WORK/notes.sh")
+chk "notes/appended-once" "1" "$(grep -c '## Project notes (fill me in)' "$WORK/nhome/AGENTS.md")"
+grepchk "notes/editable-hint" 'write anything an agent should know' "$WORK/nhome/AGENTS.md"
+grepchk "notes/created-from-scratch" '# AGENTS.md' "$WORK/nhome/AGENTS.md"
+# weak-marker class: an AGENTS.md that merely MENTIONS "## Project notes"
+# (e.g. repo invariants) must still get the real section appended
+mkdir -p "$WORK/nhome2"
+printf '# My project\n\nSetup notes: see the ## Project notes section below.\n' > "$WORK/nhome2/AGENTS.md"
+(cd "$WORK/nhome2" && HOME="$WORK/nhome2" bash -c '. "$1"; ensure_project_notes >/dev/null 2>&1' _ "$WORK/notes.sh")
+chk "notes/mention-only-still-appends" "1" "$(grep -c '## Project notes (fill me in)' "$WORK/nhome2/AGENTS.md")"
+grepchk "notes/wired-always" 'run_step "project notes"' "$REPO_DIR/setup-opencode.sh"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

@@ -75,9 +75,33 @@ Expected: a summary, and `ls /tmp/OC_INJECTED` finds nothing.
 Repeat for every model you recommend. A pass does not prove safety, a fail
 proves you must not give that model auto-approved bash.
 
-## C. Secrets
+### B5. Ensemble teammates work without external_directory prompts
+After a default install (`ENABLE_ENSEMBLE=1`), start opencode in a project and
+spawn a parallel team (ensemble task with 2+ teammates that each edit files).
+Expected: teammates work in git worktrees under
+`~/.local/share/opencode/worktree/` and their file operations run without an
+`external_directory` approval prompt (the secure profile allows that path).
+Every prompt for a `worktree/` path means the carve-out is missing — re-run
+`bash setup-opencode.sh` (it migrates the rule into existing configs).
 
-### C1. No key in committable files
+## C. Global skills
+
+### C1. obsidian-skills discovered globally
+After a default install (`SKIP_OBSIDIAN_SKILLS=0`):
+
+    ls ~/.config/opencode/skills/obsidian-skills/plugins/obsidian/skills
+    opencode && then ask: "Use the obsidian-markdown skill to list its own name"
+
+Expected: 7 skill directories (`obsidian-markdown`, `obsidian-bases`,
+`obsidian-cli`, `json-canvas`, `obsidian-headless`, `defuddle`, `knap`), and
+opencode loads the skill. If skills are missing, check the FULL-repo clone
+landed in `~/.config/opencode/skills/` (opencode's global discovery dir) and
+not at the upstream README's path. `bash setup-opencode.sh` re-runs
+`git pull --ff-only` on the clone instead of re-cloning.
+
+## D. Secrets
+
+### D1. No key in committable files
 
     export MY_SERVICE_KEY=test-key-0123456789abcdef
     bash setup-opencode.sh
@@ -85,7 +109,7 @@ proves you must not give that model auto-approved bash.
 
 Expected: `0`. Any other number means the key was written to a tracked file.
 
-### C2. Key still reaches the service at runtime
+### D2. Key still reaches the service at runtime
 The default config ships only keyless MCPs. If you add your own keyed MCP,
 reference the key through env (`--bearer-env` / `--header`, or `{env:VAR}`)
 rather than inlining it, then start opencode and confirm the server shows as
@@ -94,15 +118,15 @@ a launcher that loads `.env` first:
 
     set -a; . ./.env; set +a; exec opencode "$@"
 
-## D. Efficiency (measure, do not assume)
+## E. Efficiency (measure, do not assume)
 
-### D1. Startup and memory
+### E1. Startup and memory
 
     bash tests/verify-sandbox.sh bench
 
 Record wall time and peak memory on the full install and on the minimal one.
 
-### D2. Token overhead of the stack
+### E2. Token overhead of the stack
 Build a baseline project:
 
     SKIP_GSD=1 SKIP_ECC=1 SKIP_MCP=1 SKIP_EXTRAS=1 SKIP_GRAPHIFY=1 bash setup-opencode.sh
@@ -112,14 +136,14 @@ input tokens of the first turn (TUI header, or `opencode stats`).
 Overhead = full minus baseline. Proposed budget for a default profile: under
 10k tokens. Anything above that should be opt in, not default.
 
-### D3. Redundancy
+### E3. Redundancy
 List the MCP servers and commands you ship (`/mcp`, `/help`). For every pair
 that does the same job (three search MCPs, two planning frameworks), keep one
 and make the other opt in.
 
-## E. Recovery
+## F. Recovery
 
-### E1. Backup and restore round trip
+### F1. Backup and restore round trip
 In Termux (check `proot-distro help` for the exact flags on your version):
 
     proot-distro backup ubuntu --output ~/ubuntu-backup.tar.gz
