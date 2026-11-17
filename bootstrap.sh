@@ -4,11 +4,11 @@
 # Installs proot-distro + Ubuntu, drops the opencode-android files into the
 # container, and runs setup-opencode.sh inside it — in one shot.
 #
-# One-liner (replace YOUR-USER with the repo owner). HEAD follows the repo's
-# default branch, so forks work whether they use main, master or anything else:
-#   curl -fsSL https://raw.githubusercontent.com/YOUR-USER/opencode-android/HEAD/bootstrap.sh | bash
+# One-liner. HEAD follows the repo's default branch, so forks work whether
+# they use main, master or anything else:
+#   curl -fsSL https://raw.githubusercontent.com/Inigo-Antony/opencode-android/HEAD/bootstrap.sh | bash
 #
-# Repo override:
+# Repo override (point it at your fork):
 #   OC_ANDROID_REPO=https://github.com/YOUR-USER/opencode-android bootstrap.sh
 #
 # Security note: the container is mounted WITHOUT your Termux home (no
@@ -18,7 +18,7 @@
 set -uo pipefail
 
 DISTRO="${OC_ANDROID_DISTRO:-ubuntu}"
-REPO_URL="${OC_ANDROID_REPO:-https://github.com/YOUR-USER/opencode-android}"
+REPO_URL="${OC_ANDROID_REPO:-https://github.com/Inigo-Antony/opencode-android}"
 # Empty = clone the remote's default branch (works for main, master, ...).
 BRANCH="${OC_ANDROID_BRANCH:-}"
 
@@ -68,8 +68,13 @@ done
 
 # Move the repo files into the container if they are next to this script
 # and the rootfs is locatable, otherwise clone inside the container
-# (needs the repo public — see README).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || SCRIPT_DIR=""
+# (needs the repo public — see README). Piped via curl|bash there is no
+# script file: BASH_SOURCE is empty, and "dirname ." would wrongly resolve
+# to the cwd — leave SCRIPT_DIR empty so the clone path is taken.
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
+fi
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/setup-opencode.sh" ]; then
   if [ -n "$ROOTFS" ]; then
     log "Copying opencode-android files into the container"

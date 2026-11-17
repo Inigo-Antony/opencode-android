@@ -261,6 +261,11 @@ BKOUT="$( cd "$WORK/bk" && echo '{}' > opencode.json \
     && printf '%s\n' opencode.json.bak.* )"
 chk "bkprune/keep-one" "1" "$(printf '%s\n' "$BKOUT" | grep -c .)"
 chk "bkprune/seed-gone" "0" "$(printf '%s' "$BKOUT" | grep -c '00000101')"
+# pristine original must survive rolling pruning and never be overwritten by
+# later runs (F3: without opencode.json.orig a bad repair could lose the
+# user's pre-setup config entirely)
+chk "bkprune/orig-kept" "{}" "$(cd "$WORK/bk" && cat opencode.json.orig)"
+chk "bkprune/orig-survives-rerun" "{}" "$(cd "$WORK/bk" && printf '{"model":"changed"}' > opencode.json && log() { :; } && . "$WORK/backup.sh" && backup_config >/dev/null && cat opencode.json.orig)"
 
 # 26. ensemble plugin: pinned entry, deduped, synced to both keys, wired
 cfg plugin add "@hueyexe/opencode-ensemble@0.18.0" >/dev/null
@@ -323,6 +328,39 @@ printf '# My project\n\nSetup notes: see the ## Project notes section below.\n' 
 (cd "$WORK/nhome2" && HOME="$WORK/nhome2" bash -c '. "$1"; ensure_project_notes >/dev/null 2>&1' _ "$WORK/notes.sh")
 chk "notes/mention-only-still-appends" "1" "$(grep -c '## Project notes (fill me in)' "$WORK/nhome2/AGENTS.md")"
 grepchk "notes/wired-always" 'run_step "project notes"' "$REPO_DIR/setup-opencode.sh"
+
+# 30. audit regressions: F1 repo URL + piped bootstrap, F2 repo-vs-generic
+# instructions, F4 profileOf superset labeling, F13 persist_path under DOCTOR_ONLY
+nogrepchk "f1/no-placeholder-default" 'OC_ANDROID_REPO:-https://github.com/YOUR-USER' "$REPO_DIR/bootstrap.sh"
+grepchk "f1/default-repo" 'OC_ANDROID_REPO:-https://github.com/Inigo-Antony/opencode-android' "$REPO_DIR/bootstrap.sh"
+grepchk "f1/b-source-guard" 'BASH_SOURCE\[0\]:-' "$REPO_DIR/bootstrap.sh"
+# F2: foreign projects get the short fill-in template, this repo its own ruleset
+awk '/^write_repo_instructions\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' \
+  "$REPO_DIR/setup-opencode.sh" > "$WORK/repoins.sh"
+mkdir -p "$WORK/fproj"
+(cd "$WORK/fproj" && ROOT="$WORK/fproj" bash -c '. "$1"; cfg(){ :; }; write_repo_instructions' _ "$WORK/repoins.sh")
+chk "f2/generic-short" "yes" "$(awk 'END{print (NR<=30)?"yes":"no"}' "$WORK/fproj/.opencode/instructions/INSTRUCTIONS.md")"
+nogrepchk "f2/generic-no-repo-rules" 'Bash-only' "$WORK/fproj/.opencode/instructions/INSTRUCTIONS.md"
+mkdir -p "$WORK/rproj"; touch "$WORK/rproj/bootstrap.sh" "$WORK/rproj/setup-opencode.sh"
+(cd "$WORK/rproj" && ROOT="$WORK/rproj" bash -c '. "$1"; cfg(){ :; }; write_repo_instructions' _ "$WORK/repoins.sh")
+grepchk "f2/repo-gets-repo-rules" 'Bash-only' "$WORK/rproj/.opencode/instructions/INSTRUCTIONS.md"
+# F4: profile label is a superset check — user additions stay "secure"
+# (test 6), but a weakened or removed secure rule drops to "custom"
+rm -f opencode.json
+cfg security secure >/dev/null
+node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync("opencode.json","utf8"));c.permission.bash["dd *"]="allow";fs.writeFileSync("opencode.json",JSON.stringify(c))'
+chk "f4/weakened-rule-custom" "profile=custom" "$(cfg security keep)"
+node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync("opencode.json","utf8"));delete c.permission.bash["rm -fr /*"];fs.writeFileSync("opencode.json",JSON.stringify(c))'
+chk "f4/removed-rule-custom" "profile=custom" "$(cfg security keep)"
+# F13: the probe's own advice must work — persist_path runs even under
+# DOCTOR_ONLY, i.e. outside the DOCTOR_ONLY guard
+awk '/^backup_config$/{f=1} f{print}' "$REPO_DIR/setup-opencode.sh" > "$WORK/runblock.txt"
+awk '/^if \[ "\$\{DOCTOR_ONLY:-0\}" != "1" \]; then$/{f=1} f{print} f&&/^fi$/{exit}' "$WORK/runblock.txt" > "$WORK/doblock.txt"
+nogrepchk "f13/persist-not-in-guard" 'persist_path' "$WORK/doblock.txt"
+grepchk "f13/persist-wired" 'run_step "PATH persistence"' "$WORK/runblock.txt"
+# probe now tells the user WHICH fix applies (installed-but-no-PATH vs absent)
+grepchk "f13/probe-installed-msg" 'installed but missing from PATH' "$WORK/env-doctor.mjs"
+grepchk "f13/probe-not-installed-msg" 'not installed - run: bash setup-opencode.sh' "$WORK/env-doctor.mjs"
 
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"

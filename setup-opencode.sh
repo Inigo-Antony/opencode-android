@@ -189,6 +189,26 @@ function syncPlugins(c) {
   return p;
 }
 
+// Which security profile does `p` implement?
+//  - unlocked: exact match of UNLOCKED_PERMISSION (key order irrelevant via JSON).
+//  - secure: every SECURE_PERMISSION rule present and intact — the user may ADD
+//    rules on top (e.g. ask `git push *`), but weakening or removing any of ours
+//    drops the label. Superset check, not deep-equality.
+//  - custom: anything else.
+function profileOf(p) {
+  if (JSON.stringify(p) === JSON.stringify(UNLOCKED_PERMISSION)) return 'unlocked';
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return 'custom';
+  for (const k of Object.keys(SECURE_PERMISSION)) {
+    const want = SECURE_PERMISSION[k];
+    if (typeof want === 'string') { if (p[k] !== want) return 'custom'; continue; }
+    if (!p[k] || typeof p[k] !== 'object' || Array.isArray(p[k])) return 'custom';
+    for (const r of Object.keys(want)) {
+      if (p[k][r] !== want[r]) return 'custom';
+    }
+  }
+  return 'secure';
+}
+
 // Secure profile. Rules are evaluated last-match-wins, glob style.
 // The proot container is the real boundary; this is the seatbelt in front of it.
 const SECURE_PERMISSION = {
@@ -299,10 +319,7 @@ try {
       c.server ??= {}; c.server.mdns ??= false;
     }
     // 'keep' changes nothing; only used to report the current profile.
-    let profile = 'custom';
-    if (JSON.stringify(c.permission) === JSON.stringify(UNLOCKED_PERMISSION)) profile = 'unlocked';
-    else if (c.permission && JSON.stringify(c.permission.external_directory) === JSON.stringify(SECURE_PERMISSION.external_directory)) profile = 'secure';
-    console.log('profile=' + profile);
+    console.log('profile=' + profileOf(c.permission));
     save(c);
   }
   else if (cmd === 'instruction') {       // args: --add value | --strip-skill-md
@@ -354,9 +371,7 @@ try {
     c = JSON.parse(out);
     save(c);
     const n = o => Object.keys(o || {}).length;
-    const prof = JSON.stringify(c.permission) === JSON.stringify(UNLOCKED_PERMISSION)
-      ? 'unlocked'
-      : (c.permission && JSON.stringify(c.permission.external_directory) === JSON.stringify(SECURE_PERMISSION.external_directory) ? 'secure' : 'custom');
+    const prof = profileOf(c.permission);
     console.log(`model=${c.model}  agents=${n(c.agent)}  commands=${n(c.command)}  mcp=${Object.keys(c.mcp || {}).join(',') || 'none'}  plugins=${(c.plugins || c.plugin || []).join(',') || 'none'}  security=${prof}  share=${c.share || 'default'}`);
     if (missing.length) { console.error('[fail] unresolved {file:} refs:\n  ' + missing.join('\n  ')); process.exit(3); }
   }
@@ -370,6 +385,12 @@ cfg() { node "$CFG" "$@"; }
 
 backup_config() {
   [ -f opencode.json ] || return 0
+  # First-seen state, kept forever: the rolling backups below only preserve
+  # the newest one, so without .orig a bad repair could lose the user's
+  # pre-setup config entirely.
+  if [ ! -f opencode.json.orig ]; then
+    cp opencode.json opencode.json.orig && log "Kept pristine config as opencode.json.orig"
+  fi
   local b
   b="opencode.json.bak.$(date +%Y%m%d-%H%M%S)"
   cp opencode.json "$b" && log "Backed up existing config to $b"
@@ -453,13 +474,16 @@ install_graphify() {
 }
 
 # ---------- 4b. repo instructions (token diet) ----------
-# ECC ships a 343-line generic doc (React/Zod/coverage rules) that does not apply
-# to a Bash-only repo but is loaded into every turn and every subagent. Replace
-# it with a short repo-specific ruleset. install_ecc copies with `cp -Rn` (no
-# clobber), so this file survives later ECC updates; a re-run repairs it if ECC
-# ever overwrites it. Keep it under ~90 lines — it is a per-turn token budget.
+# In foreign projects ECC ships a 343-line generic doc (React/Zod/coverage
+# rules) that is loaded into every turn and every subagent; this repo would
+# leak its own Bash-only ruleset into every other project. So write a
+# short repo-specific ruleset here, and a small fill-me-in template
+# everywhere else. install_ecc copies with `cp -Rn` (no clobber), so these
+# survive later ECC updates; a re-run repairs them if ECC ever overwrites.
+# Keep both under ~90 lines — this is a per-turn token budget.
 write_repo_instructions() {
   mkdir -p .opencode/instructions
+  if [ -f "$ROOT/setup-opencode.sh" ] && [ -f "$ROOT/bootstrap.sh" ]; then
   cat > .opencode/instructions/INSTRUCTIONS.md <<'MD'
 # Repo rules (distilled)
 
@@ -507,6 +531,33 @@ file short: it is loaded on every turn.
 - `tdd-guide`: new behavior, failing test first.
 - `code-reviewer` / `security-reviewer`: after writing code, before commit.
 MD
+  else
+  cat > .opencode/instructions/INSTRUCTIONS.md <<'GEN'
+# Repo rules
+
+Short rules only — this file is loaded into every turn and every subagent.
+Replace the placeholders with what an agent actually needs here, then delete
+anything that does not apply.
+
+## Verify before claiming done
+- Run this repo's own checks (lint / typecheck / tests) before saying done.
+
+## Security
+- No secrets in code or config files; use env vars and let them resolve at
+  runtime. Never commit credentials.
+
+## Editing rules
+- Respect generated files: change the generator, not the artifact.
+- Small, focused edits. No drive-by refactors.
+
+## Stack & commands
+- (stack / runtime:)
+- (build / test / lint commands:)
+
+## Conventions and hard limits
+- (naming, layout, things that must never be touched:)
+GEN
+  fi
   cfg instruction --add .opencode/instructions/INSTRUCTIONS.md
 }
 
@@ -600,8 +651,11 @@ write_env_doctor() {
 // Runs regardless of graph presence; the probe is POSIX sh (Linux/Termux).
 //
 // Keep the probe free of backticks and $(...) — it is executed inline.
+// A tool missing from PATH gets one of two messages, with the matching fix:
+// installed in a tool dir but no PATH entry (DOCTOR_ONLY re-run) vs not
+// installed at all (full setup re-run).
 const REMINDER =
-  'for c in node opencode graphify; do command -v "$c" >/dev/null 2>&1 || echo "[env-doctor] $c is missing from PATH - run: DOCTOR_ONLY=1 bash setup-opencode.sh"; done ; ';
+  'for c in node opencode graphify; do if command -v "$c" >/dev/null 2>&1; then :; elif [ -x "$HOME/.opencode/bin/$c" ] || [ -x "$HOME/.local/bin/$c" ] || [ -x "$HOME/.npm-global/bin/$c" ]; then echo "[env-doctor] $c is installed but missing from PATH - run: DOCTOR_ONLY=1 bash setup-opencode.sh"; else echo "[env-doctor] $c is not installed - run: bash setup-opencode.sh"; fi; done ; ';
 
 const location = [...import.meta.url].reduce((hash, ch) => (Math.imul(hash, 31) + ch.charCodeAt(0)) >>> 0, 7);
 const checked = (globalThis.__envDoctorChecked ??= new Set());
@@ -717,7 +771,7 @@ update_gitignore() {
   touch .gitignore
   # graphify-out/ is a rebuildable artifact (graphify update .) and .planning/graphs/
   # holds GSD copies of it; committing either would land an 800K+ diff per build.
-  for line in 'opencode.json.bak.*' '.opencode/.tmp-setup/' '.opencode/node_modules/' '.env' 'graphify-out/' '.planning/graphs/'; do
+  for line in 'opencode.json.orig' 'opencode.json.bak.*' '.opencode/.tmp-setup/' '.opencode/node_modules/' '.env' 'graphify-out/' '.planning/graphs/'; do
     grep -qxF "$line" .gitignore || echo "$line" >> .gitignore
   done
 }
@@ -760,8 +814,12 @@ if [ "${DOCTOR_ONLY:-0}" != "1" ]; then
   run_step "phone extras"           "${SKIP_EXTRAS:-0}"    install_extras
   run_step "obsidian skills"        "${SKIP_OBSIDIAN_SKILLS:-0}" install_obsidian_skills
   run_step "gitignore"              "0"                    update_gitignore
-  run_step "PATH persistence"       "0"                    persist_path
 fi
+# Outside the DOCTOR_ONLY guard: the env-doctor probe tells users to fix a
+# broken PATH with a DOCTOR_ONLY re-run, so that re-run must actually persist
+# the PATH (F13: it used to skip this step, leaving the probe's own advice
+# unable to fix the problem).
+run_step "PATH persistence"       "0"                    persist_path
 run_step "project notes" "0" ensure_project_notes
 run_step "config doctor" "0" doctor
 
@@ -771,9 +829,9 @@ for r in "${RESULTS[@]}"; do echo "  - $r"; done
 
 if printf '%s\n' "${RESULTS[@]}" | grep -q 'config doctor: FAILED' || printf '%s\n' "${RESULTS[@]}" | grep -q 'security profile: FAILED'; then
   if [ "${UNLOCK:-0}" = "1" ]; then
-    fail "Setup still has problems (see above). Backups: ls opencode.json.bak.*"
+    fail "Setup still has problems (see above). Backups: opencode.json.orig (pristine), ls opencode.json.bak.*"
   else
-    fail "opencode.json still has problems (see above). Backups: ls opencode.json.bak.*"
+    fail "opencode.json still has problems (see above). Backups: opencode.json.orig (pristine), ls opencode.json.bak.*"
   fi
   exit 1
 fi

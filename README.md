@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 85 checks" src="https://img.shields.io/badge/tests-85%20checks-brightgreen">
+  <img alt="Tests: 85 checks" src="https://img.shields.io/badge/tests-99%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -83,9 +83,10 @@ After `opencode` launches: `/models` (Go or big-pickle), `/gsd-help`,
 | `tests/MANUAL-TESTS.md` | Behavioral tests the scripts can't cover (agent prompt-injection, canary, permission prompts) |
 
 Re-running `setup-opencode.sh` is always safe and repairs `opencode.json`;
-`DOCTOR_ONLY=1 bash setup-opencode.sh` only repairs/validates (a rolling
-backup lands in `opencode.json.bak.*`, newest kept). Config broke after
-manual edits? Run the doctor.
+`DOCTOR_ONLY=1 bash setup-opencode.sh` only repairs/validates. Your config is
+never lost: the first-seen state is kept forever as `opencode.json.orig`, and
+each run additionally stamps a rolling backup into `opencode.json.bak.*`
+(newest kept). Config broke after manual edits? Run the doctor.
 
 ## Tuning
 
@@ -142,7 +143,7 @@ manual edits? Run the doctor.
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (85 checks)
+tests/run-tests.sh           Automated test battery (99 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits
