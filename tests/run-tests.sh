@@ -362,6 +362,40 @@ grepchk "f13/persist-wired" 'run_step "PATH persistence"' "$WORK/runblock.txt"
 grepchk "f13/probe-installed-msg" 'installed but missing from PATH' "$WORK/env-doctor.mjs"
 grepchk "f13/probe-not-installed-msg" 'not installed - run: bash setup-opencode.sh' "$WORK/env-doctor.mjs"
 
+# 31. audit regressions: F5 agent/command diet (cfg ecc allowlist + prune)
+# and F6 AGENTS.md diet with generic docs/agents-md-template.txt
+cat > "$WORK/ecc.json" <<'ECCJS'
+{"agent":{"build":{"mode":"primary"},"planner":{"mode":"subagent"},"e2e-runner":{"mode":"subagent"},"python-reviewer":{"mode":"subagent"},"go-reviewer":{"mode":"subagent"}},"command":{"plan":{"agent":"planner"},"e2e":{"agent":"e2e-runner"},"verify":{},"learn":{}}}
+ECCJS
+rm -f opencode.json
+cfg ecc "$WORK/ecc.json" >/dev/null
+chk "f5/default-agents" "build,planner,python-reviewer" "$(node -pe 'Object.keys(JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent).sort().join(",")')"
+chk "f5/orphan-commands-dropped" "learn,plan,verify" "$(node -pe 'Object.keys(JSON.parse(require("fs").readFileSync("opencode.json","utf8")).command).sort().join(",")')"
+# all: the escape hatch — nothing filtered
+rm -f opencode.json
+ECC_AGENTS=all cfg ecc "$WORK/ecc.json" >/dev/null
+chk "f5/all-no-filter" "build,e2e-runner,go-reviewer,planner,python-reviewer" "$(node -pe 'Object.keys(JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent).sort().join(",")')"
+# extension: a comma-list entry outside the default allowlist is kept
+rm -f opencode.json
+ECC_AGENTS=go-reviewer cfg ecc "$WORK/ecc.json" >/dev/null
+node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent["go-reviewer"]' >/dev/null 2>&1 \
+  && chk "f5/extend-extra-agent" "kept" "kept" \
+  || chk "f5/extend-extra-agent" "kept" "dropped"
+# re-run repair: an agent a previous run copied from ECC is pruned when no
+# longer allowed — unless the user modified it (deep-equal check)
+rm -f opencode.json
+node -e 'const fs=require("fs");fs.writeFileSync("opencode.json",JSON.stringify({agent:{"e2e-runner":{"mode":"subagent"},"planner":{"mode":"subagent","model":"user-pick"}}}))'
+cfg ecc "$WORK/ecc.json" >/dev/null
+chk "f5/prune-unmodified" "undefined" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent["e2e-runner"] ?? "undefined"')"
+chk "f5/prune-keeps-tweaked" "user-pick" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).agent.planner.model')"
+# F6: AGENTS.md is a diet summary, template is generic — never identical again
+chk "f6/differs-template" "differ" "$(cmp -s "$REPO_DIR/AGENTS.md" "$REPO_DIR/docs/agents-md-template.txt" && echo same || echo differ)"
+nogrepchk "f6/template-generic" 'opencode-android' "$REPO_DIR/docs/agents-md-template.txt"
+SIZE=$(wc -c < "$REPO_DIR/AGENTS.md")
+chk "f6/agents-md-diet" "yes" "$([ "$SIZE" -lt 3072 ] && echo yes || echo no)"
+grepchk "f6/notes-kept" '## Project notes (fill me in)' "$REPO_DIR/AGENTS.md"
+grepchk "f6/maintaining-pointer" 'docs/MAINTAINING.md' "$REPO_DIR/AGENTS.md"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

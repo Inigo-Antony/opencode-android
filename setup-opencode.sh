@@ -261,7 +261,34 @@ try {
     const p = syncPlugins({ plugin: [...(c.plugin || []), ...(c.plugins || []), 'ecc-universal'] }) || [];
     c.plugin = p; c.plugins = p;
     c.default_agent ??= 'build';
-    for (const k of ['agent', 'command']) if (src[k]) c[k] = { ...src[k], ...(c[k] || {}) };
+    // Token diet (audit F5): ECC ships ~26 subagents + 26 commands and every
+    // entry is loaded into context each session. Keep the primaries plus an
+    // allowlist of subagents (ECC_AGENTS env: comma-list to extend, 'all' to
+    // disable filtering); drop commands that would call a filtered-out agent.
+    const env = (process.env.ECC_AGENTS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const allow = env.includes('all') ? null
+      : new Set(['build', 'plan', 'planner', 'architect', 'code-reviewer', 'security-reviewer',
+                 'tdd-guide', 'build-error-resolver', 'python-reviewer', 'docs-lookup', ...env]);
+    const srcA = src.agent && allow
+      ? Object.fromEntries(Object.entries(src.agent).filter(([k]) => allow.has(k)))
+      : src.agent || {};
+    const srcC = src.command && allow
+      ? Object.fromEntries(Object.entries(src.command).filter(([, d]) => !d || !d.agent || allow.has(d.agent)))
+      : src.command || {};
+    // Re-run repair: prune entries a previous run copied from ECC that are no
+    // longer allowed — but only when the user never modified them (still
+    // deep-equal ECC's current definition), so hand-tweaks always survive.
+    if (allow) for (const k of ['agent', 'command']) {
+      const old = c[k] || {}, def = src[k] || {};
+      for (const n of Object.keys(old)) {
+        if (allow.has(n) || !def[n]) continue;
+        if (JSON.stringify(def[n]) === JSON.stringify(old[n])) delete old[n];
+      }
+    }
+    for (const k of ['agent', 'command']) {
+      const s = k === 'agent' ? srcA : srcC;
+      if (Object.keys(s).length) c[k] = { ...s, ...(c[k] || {}) };
+    }
     // Only ECC's short core instructions file is always-on; skills load on demand.
     const ins = '.opencode/instructions/INSTRUCTIONS.md';
     if (fs.existsSync(ins)) c.instructions = [...new Set([...(c.instructions || []), ins])];

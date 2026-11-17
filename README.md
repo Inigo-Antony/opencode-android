@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 85 checks" src="https://img.shields.io/badge/tests-99%20checks-brightgreen">
+  <img alt="Tests: 110 checks" src="https://img.shields.io/badge/tests-110%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -98,6 +98,7 @@ each run additionally stamps a rolling backup into `opencode.json.bak.*`
 | `GO_MODEL` / `GO_SMALL_MODEL` | Main/small models when a Go subscription is detected (both default to `glm-5.3-flash`) |
 | `GO_PLAN_MODEL` / `GO_BUILD_MODEL` | Per-agent defaults when Go is detected (`glm-5.3` / `glm-5.3-flash`) |
 | `ECC_SKILLS=all\|none` | ECC skills: all 300+, or none (default: 11 core) |
+| `ECC_AGENTS=` | Comma-list of extra ECC subagents to load (default: 8-core allowlist; `all` = no filtering) |
 | `ENABLE_ENSEMBLE=0` | No `@hueyexe/opencode-ensemble` plugin (parallel agent teams) |
 | `ENABLE_CONTEXT7=0` etc. | Disable context7 / parallel / dcp / shell-strategy |
 | `SKIP_GSD=1`, `SKIP_GRAPHIFY=1`, `SKIP_ECC=1`, `SKIP_MCP=1`, `SKIP_EXTRAS=1`, `SKIP_OPENCODE=1`, `SKIP_OBSIDIAN_SKILLS=1` | Skip a component |
@@ -143,7 +144,7 @@ each run additionally stamps a rolling backup into `opencode.json.bak.*`
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (99 checks)
+tests/run-tests.sh           Automated test battery (110 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits
