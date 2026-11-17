@@ -420,6 +420,40 @@ cfg instruction --add "retired-url" >/dev/null
 cfg instruction --remove "retired-url" >/dev/null
 chk "f7/instruction-remove" "undefined" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).instructions ?? "undefined"')"
 
+# 33. audit regressions: F10 memoized Go-auth detection, F12 docs accuracy, F9 ensemble cost note
+# detect_go_auth spawns `opencode auth list` at most once, even when called 3x
+# (the stub is invoked inside a command substitution, so count via a log file)
+awk '/^detect_go_auth\(\) \{/{f=1} f{print} f&&/^\}$/{exit}' "$REPO_DIR/setup-opencode.sh" > "$WORK/goauth.sh"
+mkdir -p "$WORK/f10home/.local/share/opencode"
+cat > "$WORK/f10a.sh" <<'EOS'
+export HOME="$F10_HOME"
+source "$1/goauth.sh"
+need() { return 0; }
+opencode() { echo call >> "$SPAWN_LOG"; echo opencode-go/glm; }
+unset _GO_AUTH_LISTED _GO_AUTH_LIST
+detect_go_auth && detect_go_auth && detect_go_auth || exit 9
+EOS
+F10_HOME="$WORK/f10home" SPAWN_LOG="$WORK/spawns.log" bash "$WORK/f10a.sh" "$WORK"
+chk "f10/memoize-one-spawn" "1" "$(grep -c call "$WORK/spawns.log")"
+# auth.json hit short-circuits before any spawn
+echo '{"opencode-go":{"key":"x"}}' > "$WORK/f10home/.local/share/opencode/auth.json"
+rm -f "$WORK/spawns.log"
+cat > "$WORK/f10b.sh" <<'EOS'
+export HOME="$1"
+source "$2/goauth.sh"
+need() { return 0; }
+opencode() { echo call >> "$SPAWN_LOG"; echo anything; }
+unset _GO_AUTH_LISTED _GO_AUTH_LIST
+detect_go_auth && detect_go_auth || exit 9
+EOS
+F10_HOME=ignore SPAWN_LOG="$WORK/spawns.log" bash "$WORK/f10b.sh" "$WORK/f10home" "$WORK"
+chk "f10/authfile-shortcircuit" "0" "$(grep -c call "$WORK/spawns.log" 2>/dev/null || echo 0)"
+# SECURITY.md must not reference rules that do not exist
+nogrepchk "f12/no-web-deny" 'web-deny' "$REPO_DIR/docs/SECURITY.md"
+# README documents ensemble's RAM/token cost next to the flag
+grepchk "f9/ensemble-cost-note" 'RAM and tokens' "$REPO_DIR/README.md"
+grepchk "f9/maintaining-ensemble-note" 'multiplies RAM and token' "$REPO_DIR/docs/MAINTAINING.md"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

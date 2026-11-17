@@ -80,7 +80,10 @@ bash -n <script>.sh         # syntax check for any Bash edit
   (test compares them deep-equal on a fresh config; drift fails the suite).
 - **Ensemble plugin is pinned** (`@hueyexe/opencode-ensemble@0.18.0` in
   `install_extras`, behind `ENABLE_ENSEMBLE`): unpinned npm plugins are cached
-  once and never auto-update (opencode #6774).
+  once and never auto-update (opencode #6774). Ensemble is default-ON by
+  owner decision — each teammate is a full agent context in its own worktree,
+  which multiplies RAM and token usage; `ENABLE_ENSEMBLE=0` is the documented
+  off-switch for small devices. Never flip the default silently.
 - **obsidian-skills is global** at `~/.config/opencode/skills/obsidian-skills`
   — NOT the upstream README's install path, which is not in opencode's
   discovery table. Upstream repo is `obsidianmd/obsidian-skills` (renamed from
@@ -169,3 +172,13 @@ When bumping a pin, update the version in `setup-opencode.sh` only.
 it re-clones only when the pinned SHA is not in the cache or `ECC_REFRESH=1`
 forces a refresh. The doctor's exit-3 retry re-runs `install_ecc`, and a
 healthy cache makes that retry cheap.
+
+## Performance notes (audit F11 — recorded, deliberately not optimized)
+
+Setup spawns `node` roughly 17 times (one per `cfg` subcommand). That cost
+was measured in audit F11 and accepted: setup runs once per project, not per
+session, and batching `cfg` calls into one process would complicate the
+subcommand API for seconds of savings. If a future change wants to revisit
+this, baseline with `bash tests/verify-sandbox.sh bench` (start time and peak
+memory of one trivial in-container run) and compare against the audit §6
+table in `opencode-android-audit.md` before and after.

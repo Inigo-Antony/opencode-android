@@ -55,8 +55,8 @@ explicit overwrite; `SECURITY_PROFILE=keep` changes nothing).
 
 - **Prompt injection is not solved.** A malicious page fetched via
   websearch/webfetch/MCP can still instruct your agent. The layers here reduce
-  blast radius (container, external_directory ask, web-deny... they rely on
-  you approving). Do not run `UNLOCK=1` on untrusted research sessions.
+  blast radius (container, external_directory ask, destructive-bash deny,
+  share disabled... they rely on you approving). Do not run `UNLOCK=1` on untrusted research sessions.
 - **Outbound network is not restricted.** Anything inside the container can
   reach the internet. If that matters, add an on-device firewall policy or
   accept it — most code agents need network to be useful.

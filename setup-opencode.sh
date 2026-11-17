@@ -463,9 +463,16 @@ install_opencode() {
 # OpenCode Go detection: creds live in auth.json (written by `/connect`).
 detect_go_auth() {
   local f="$HOME/.local/share/opencode/auth.json"
+  # F10: auth.json can change mid-session (after /connect) but the CLI spawn is
+  # slow, so its result is memoized; the cheap file check always runs fresh.
   [ -f "$f" ] && grep -q '"opencode-go"\|"opencode\.go"' "$f" 2>/dev/null && return 0
-  need opencode && opencode auth list 2>/dev/null | grep -qi 'opencode-go\|opencode\.go' && return 0
-  return 1
+  if [ -z "${_GO_AUTH_LISTED:-}" ]; then
+    _GO_AUTH_LISTED=1
+    if need opencode; then
+      _GO_AUTH_LIST=$(opencode auth list 2>/dev/null | grep -i 'opencode-go\|opencode\.go') || true
+    fi
+  fi
+  [ -n "${_GO_AUTH_LIST:-}" ]
 }
 
 write_base_config() {
