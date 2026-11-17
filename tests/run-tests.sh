@@ -396,6 +396,30 @@ chk "f6/agents-md-diet" "yes" "$([ "$SIZE" -lt 3072 ] && echo yes || echo no)"
 grepchk "f6/notes-kept" '## Project notes (fill me in)' "$REPO_DIR/AGENTS.md"
 grepchk "f6/maintaining-pointer" 'docs/MAINTAINING.md' "$REPO_DIR/AGENTS.md"
 
+# 32. audit regressions: F7 supply-chain pins, F8 ECC cache
+# no floating sources left in the installer
+nogrepchk "f7/gsd-not-latest" 'get-shit-done-cc@latest' "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/gsd-pinned" 'get-shit-done-cc@\${GSD_VERSION}' "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/graphify-pinned" 'graphifyy==\${GRAPHIFY_VERSION}' "$REPO_DIR/setup-opencode.sh"
+nogrepchk "f7/graphify-bare-install" 'install graphifyy$' "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/ecc-ref-pin" 'ECC_REF:-3f14a10' "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/dcp-pinned" 'opencode-dcp@\${DCP_VERSION}' "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/ecc-universal-pinned" "ECC_PLUGIN_PIN = 'ecc-universal@2.2.3'" "$REPO_DIR/setup-opencode.sh"
+grepchk "f7/shell-strategy-sha" '1303f24df1649202834e052f1d66560ed186e413' "$REPO_DIR/setup-opencode.sh"
+nogrepchk "f7/no-floating-instruction" 'cfg instruction --add "\$SHELL_STRATEGY_URL"' "$REPO_DIR/setup-opencode.sh"
+grepchk "f8/ecc-cache" 'opencode-android/ecc' "$REPO_DIR/setup-opencode.sh"
+grepchk "f8/ecc-refresh-escape" 'ECC_REFRESH' "$REPO_DIR/setup-opencode.sh"
+# syncPlugins migrates bare + old-pinned ECC plugin spellings to the current pin
+rm -f opencode.json
+node -e 'const fs=require("fs");fs.writeFileSync("opencode.json",JSON.stringify({plugin:["ecc-universal","ecc-universal@2.2.2"]}))'
+cfg plugin add "other-plugin" >/dev/null
+chk "f7/plugin-pin-migrated" '["ecc-universal@2.2.3","other-plugin"]' "$(node -pe 'JSON.stringify(JSON.parse(require("fs").readFileSync("opencode.json","utf8")).plugin)')"
+# instruction --remove drops a retired source and can delete the key entirely
+rm -f opencode.json
+cfg instruction --add "retired-url" >/dev/null
+cfg instruction --remove "retired-url" >/dev/null
+chk "f7/instruction-remove" "undefined" "$(node -pe 'JSON.parse(require("fs").readFileSync("opencode.json","utf8")).instructions ?? "undefined"')"
+
 # 21. README test-count ratchet: the badge and the repo-layout line must match
 # the real suite size, so docs cannot drift stale again (they said "29 checks"
 # long after the suite passed that). EXPECTED includes these two checks.

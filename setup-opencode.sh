@@ -49,7 +49,14 @@ set -uo pipefail
 ECC_REPO="${ECC_REPO:-https://github.com/affaan-m/everything-claude-code.git}"
 ECC_SKILLS="${ECC_SKILLS:-core}"
 CORE_SKILLS="tdd-workflow security-review coding-standards frontend-patterns frontend-slides backend-patterns e2e-testing verification-loop api-design strategic-compact eval-harness"
-SHELL_STRATEGY_URL="https://raw.githubusercontent.com/JRedeker/opencode-shell-strategy/trunk/shell_strategy.md"
+# Supply-chain pins (audit F7): every external source at an exact version or
+# SHA, so a setup is reproducible and cannot change content under us.
+GSD_VERSION="${GSD_VERSION:-1.42.3}"
+GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.111}"
+ECC_REF="${ECC_REF:-3f14a103a8694e51c1df9a806217a6d0b5f7a6f7}"
+DCP_VERSION="${DCP_VERSION:-3.2.1}"
+# shell-strategy vendored at its pinned commit (the old /trunk/ URL floated)
+SHELL_STRATEGY_URL="https://raw.githubusercontent.com/JRedeker/opencode-shell-strategy/1303f24df1649202834e052f1d66560ed186e413/shell_strategy.md"
 
 RESULTS=()
 log()    { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -182,8 +189,13 @@ const save = c => fs.writeFileSync(F, JSON.stringify(c, null, 2) + '\n');
 // Keep the two plugin keys identical. OpenCode 1 reads "plugin", OpenCode 2
 // (Sept 2026) reads "plugins"; setting both makes the config portable across
 // both versions and re-runs.
+// Audit F7: the ECC plugin must be version-pinned. Normalize any bare (or
+// older-pinned) spelling found in an existing config to the current pin, so
+// re-runs migrate old configs and no duplicate version entries linger.
+const ECC_PLUGIN_PIN = 'ecc-universal@2.2.3';
 function syncPlugins(c) {
-  const p = [...new Set([...(c.plugin || []), ...(c.plugins || [])])];
+  const norm = (x) => (/^ecc-universal(@.*)?$/.test(x) ? ECC_PLUGIN_PIN : x);
+  const p = [...new Set([...(c.plugin || []), ...(c.plugins || [])].map(norm))];
   if (!p.length) return null;
   c.plugin = p; c.plugins = p;
   return p;
@@ -258,7 +270,7 @@ try {
   }
   else if (cmd === 'ecc') {               // args: path to ECC's .opencode/opencode.json
     const c = load(); const src = args[0] && fs.existsSync(args[0]) ? load(args[0]) : {};
-    const p = syncPlugins({ plugin: [...(c.plugin || []), ...(c.plugins || []), 'ecc-universal'] }) || [];
+    const p = syncPlugins({ plugin: [...(c.plugin || []), ...(c.plugins || []), ECC_PLUGIN_PIN] }) || [];
     c.plugin = p; c.plugins = p;
     c.default_agent ??= 'build';
     // Token diet (audit F5): ECC ships ~26 subagents + 26 commands and every
@@ -349,12 +361,20 @@ try {
     console.log('profile=' + profileOf(c.permission));
     save(c);
   }
-  else if (cmd === 'instruction') {       // args: --add value | --strip-skill-md
+  else if (cmd === 'instruction') {       // args: --add value | --remove value | --strip-skill-md
     const [flag, ...rest] = args; const c = load();
     if (flag === '--add' && rest[0]) {
       const v = rest[0];
       const arr = Array.isArray(c.instructions) ? c.instructions : (c.instructions ? [c.instructions] : []);
       if (!arr.includes(v)) { arr.push(v); c.instructions = arr; }
+    }
+    if (flag === '--remove' && rest[0]) {
+      // migrate retired instruction sources out of existing configs
+      if (Array.isArray(c.instructions)) {
+        const v = rest[0];
+        c.instructions = c.instructions.filter(x => x !== v);
+        if (!c.instructions.length) delete c.instructions;
+      }
     }
     if (flag === '--strip-skill-md' && Array.isArray(c.instructions)) {
       const before = c.instructions.length;
@@ -468,9 +488,9 @@ write_base_config() {
 # ---------- 3. GSD ----------
 install_gsd() {
   log "Installing GSD for OpenCode (project-local)"
-  npx --yes get-shit-done-cc@latest --opencode --local && return 0
+  npx --yes "get-shit-done-cc@${GSD_VERSION}" --opencode --local && return 0
   warn "Local GSD install failed; falling back to global (~/.config/opencode)"
-  npx --yes get-shit-done-cc@latest --opencode --global
+  npx --yes "get-shit-done-cc@${GSD_VERSION}" --opencode --global
 }
 
 # ---------- 4. graphify ----------
@@ -478,13 +498,13 @@ install_graphify() {
   log "Installing graphify"
   if ! need graphify; then
     if need uv; then
-      uv tool install graphifyy || uv tool upgrade graphifyy
+      uv tool install "graphifyy==${GRAPHIFY_VERSION}" || uv tool upgrade graphifyy
     elif need pipx; then
-      pipx install graphifyy
+      pipx install "graphifyy==${GRAPHIFY_VERSION}"
     elif need pip3 || need pip; then
       local pip_bin; pip_bin="$(command -v pip3 || command -v pip)"
-      "$pip_bin" install --user graphifyy \
-        || "$pip_bin" install --user --break-system-packages graphifyy
+      "$pip_bin" install --user "graphifyy==${GRAPHIFY_VERSION}" \
+        || "$pip_bin" install --user --break-system-packages "graphifyy==${GRAPHIFY_VERSION}"
     else
       fail "No uv, pipx or pip. Run: apt install -y pipx"
       return 1
@@ -593,9 +613,25 @@ copy_nc() { mkdir -p "$2"; cp -Rn "$1/." "$2/" 2>/dev/null || true; }
 
 install_ecc() {
   log "Installing everything-claude-code (skills: $ECC_SKILLS)"
-  local e="$WORK/ecc"
-  rm -rf "$e"
-  git clone --depth 1 -q "$ECC_REPO" "$e" || { fail "git clone of ECC failed"; return 1; }
+  # Audit F8: clone once into a cache and reuse it; re-clone only when the
+  # pinned SHA changes (not in cache) or ECC_REFRESH=1 forces a refresh. The
+  # doctor's exit-3 retry re-runs install_ecc, and a healthy cache makes
+  # that retry cheap.
+  local cache="$HOME/.cache/opencode-android/ecc"
+  [ "${ECC_REFRESH:-0}" = "1" ] && rm -rf "$cache"
+  if [ -d "$cache/.git" ] && git -C "$cache" cat-file -e "${ECC_REF}^{commit}" 2>/dev/null; then
+    log "  cache hit at pinned SHA"
+  else
+    rm -rf "$cache"
+    git clone --depth 1 -q "$ECC_REPO" "$cache" || { fail "git clone of ECC failed"; return 1; }
+    # Pin the audited SHA (audit F7): GitHub serves arbitrary SHAs over fetch.
+    git -C "$cache" cat-file -e "${ECC_REF}^{commit}" 2>/dev/null \
+      || git -C "$cache" fetch --depth 1 -q origin "$ECC_REF" \
+      || { fail "fetch of pinned ECC SHA failed"; return 1; }
+    git -C "$cache" checkout --detach -q "$ECC_REF" \
+      || { fail "checkout of pinned ECC SHA failed"; return 1; }
+  fi
+  local e="$cache"
 
   for d in prompts commands instructions; do
     [ -d "$e/.opencode/$d" ] && copy_nc "$e/.opencode/$d" ".opencode/$d"
@@ -719,7 +755,7 @@ install_extras() {
   log "Adding phone QoL extras + ensemble"
   if [ "${ENABLE_DCP:-1}" = "1" ]; then
     # dynamic context pruning: prunes stale tool outputs (huge for small RAM / mobile sessions)
-    cfg plugin add "@tarquinen/opencode-dcp" && log "  dcp enabled"
+    cfg plugin add "@tarquinen/opencode-dcp@${DCP_VERSION}" && log "  dcp enabled (pinned ${DCP_VERSION})"
   fi
   if [ "${ENABLE_ENSEMBLE:-1}" = "1" ]; then
     # parallel agent teams (worktrees + shared task board). Pinned: unpinned
@@ -727,8 +763,25 @@ install_extras() {
     cfg plugin add "@hueyexe/opencode-ensemble@0.18.0" && log "  ensemble enabled (pinned 0.18.0)"
   fi
   if [ "${ENABLE_SHELL_STRATEGY:-1}" = "1" ]; then
-    # non-interactive shell rules: stops agents hanging on TTY prompts (common in proot)
-    cfg instruction --add "$SHELL_STRATEGY_URL" && log "  shell-strategy instructions enabled"
+    # non-interactive shell rules: stops agents hanging on TTY prompts (common
+    # in proot). Audit F7: vendored into the project at the pinned SHA instead
+    # of pointing at the floating /trunk/ URL — its content changed under us.
+    local ss=".opencode/instructions/shell-strategy.md"
+    # migrate configs that still carry the retired trunk-URL instruction
+    cfg instruction --remove "https://raw.githubusercontent.com/JRedeker/opencode-shell-strategy/trunk/shell_strategy.md"
+    if curl -fsSL --retry 2 "$SHELL_STRATEGY_URL" -o "$ss.tmp" \
+       && grep -q 'Shell non-interactive strategy' "$ss.tmp"; then
+      mv "$ss.tmp" "$ss"
+      cfg instruction --add "$ss" && log "  shell-strategy vendored (pinned SHA)"
+    else
+      rm -f "$ss.tmp"
+      if [ -f "$ss" ]; then
+        warn "shell-strategy download failed; keeping existing vendored copy"
+        cfg instruction --add "$ss"
+      else
+        warn "shell-strategy download failed; skipping (re-run setup to retry)"
+      fi
+    fi
   fi
   return 0
 }

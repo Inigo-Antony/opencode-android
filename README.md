@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Platform: Termux + proot-distro" src="https://img.shields.io/badge/Termux-proot--distro-3DDC84?logo=android&logoColor=white">
   <img alt="Stack: Bash" src="https://img.shields.io/badge/stack-Bash-4EAA25?logo=gnubash&logoColor=white">
-  <img alt="Tests: 110 checks" src="https://img.shields.io/badge/tests-110%20checks-brightgreen">
+  <img alt="Tests: 123 checks" src="https://img.shields.io/badge/tests-123%20checks-brightgreen">
   <img alt="Install: one-liner" src="https://img.shields.io/badge/install-one--liner-blue">
 </p>
 
@@ -144,7 +144,7 @@ each run additionally stamps a rolling backup into `opencode.json.bak.*`
 bootstrap.sh                 Termux side: proot-distro + Ubuntu + first-run setup
 setup-opencode.sh            Container side: installs + configures everything, idempotent
 templates/security-profile.json   Auditable copy of the default permission set
-tests/run-tests.sh           Automated test battery (110 checks)
+tests/run-tests.sh           Automated test battery (123 checks)
 tests/verify-sandbox.sh      Acceptance tests: sandbox leak, config hygiene, bench
 tests/MANUAL-TESTS.md        Behavioral tests, done by hand in a throwaway project
 docs/SECURITY.md             Threat model, layers, limits

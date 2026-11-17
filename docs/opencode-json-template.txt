@@ -30,22 +30,22 @@
   },
   "plugin": [
     ".opencode/plugins/graphify.js",
-    "ecc-universal",
+    "ecc-universal@2.2.3",
     ".opencode/plugins/env-doctor.js",
-    "@tarquinen/opencode-dcp",
+    "@tarquinen/opencode-dcp@3.2.1",
     "@hueyexe/opencode-ensemble@0.18.0"
   ],
   "plugins": [
     ".opencode/plugins/graphify.js",
-    "ecc-universal",
+    "ecc-universal@2.2.3",
     ".opencode/plugins/env-doctor.js",
-    "@tarquinen/opencode-dcp",
+    "@tarquinen/opencode-dcp@3.2.1",
     "@hueyexe/opencode-ensemble@0.18.0"
   ],
   "instructions": [
     "AGENTS.md",
     ".opencode/instructions/INSTRUCTIONS.md",
-    "https://raw.githubusercontent.com/JRedeker/opencode-shell-strategy/trunk/shell_strategy.md"
+    ".opencode/instructions/shell-strategy.md"
   ],
   "default_agent": "build",
   "agent": {

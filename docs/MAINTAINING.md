@@ -142,3 +142,30 @@ bash -n <script>.sh         # syntax check for any Bash edit
   defaults; `UNLOCK=1` is the opt-in.
 - The proot container is the real security boundary; deny rules are a
   seatbelt. Never add `--termux-home` binds to logins.
+
+## Supply-chain pins (audit F7)
+
+All external sources are pinned to exact versions/SHAs:
+
+| Source | Pin | Where |
+|---|---|---|
+| get-shit-done-cc | `@${GSD_VERSION}` = 1.42.3 | `install_gsd` |
+| graphify (PyPI) | `graphifyy==0.9.111` | `install_graphify` (uv/pipx/pip) |
+| everything-claude-code | SHA `3f14a10…` | `install_ecc` |
+| @tarquinen/opencode-dcp | `@${DCP_VERSION}` = 3.2.1 | `install_extras` |
+| ecc-universal | `@2.2.3` (`ECC_PLUGIN_PIN`) | `syncPlugins` |
+| opencode-shell-strategy | SHA `1303f24…` | vendored to `.opencode/instructions/shell-strategy.md` |
+| obsidian-skills | tracks `main` (deliberate) | `install_obsidian_skills` |
+| @hueyexe/opencode-ensemble | `@0.18.0` | `install_extras` |
+
+All pins are env-overridable (`GSD_VERSION`, `GRAPHIFY_VERSION`, `ECC_REF`,
+`DCP_VERSION`). `syncPlugins` normalizes any bare or older-pinned
+`ecc-universal` spelling to the current pin, so re-runs migrate old configs.
+When bumping a pin, update the version in `setup-opencode.sh` only.
+
+## ECC cache (audit F8)
+
+`install_ecc` clones once into `~/.cache/opencode-android/ecc` and reuses it;
+it re-clones only when the pinned SHA is not in the cache or `ECC_REFRESH=1`
+forces a refresh. The doctor's exit-3 retry re-runs `install_ecc`, and a
+healthy cache makes that retry cheap.
